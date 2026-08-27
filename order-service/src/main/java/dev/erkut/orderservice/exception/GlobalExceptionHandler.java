@@ -42,4 +42,20 @@
             errors.put("error", ex.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errors);
         }
+
+        @ExceptionHandler(CustomerNotFoundException.class)
+        public ResponseEntity<Map<String, String>> handleCustomerNotFoundException(CustomerNotFoundException ex) {
+            Map<String, String> errors = new HashMap<>();
+
+            errors.put("error", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errors);
+        }
+
+        @ExceptionHandler(ProductNotFoundException.class)
+        public ResponseEntity<Map<String, String>> handleProductNotFoundException(ProductNotFoundException ex) {
+            Map<String, String> errors = new HashMap<>();
+
+            errors.put("error", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errors);
+        }
     }
