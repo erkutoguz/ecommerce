@@ -1,8 +1,6 @@
 package dev.erkut.orderservice.controller;
 
-import dev.erkut.orderservice.dto.OrderCreateRequest;
-import dev.erkut.orderservice.dto.OrderResponse;
-import dev.erkut.orderservice.dto.UpdateOrderItemRequest;
+import dev.erkut.orderservice.dto.*;
 import dev.erkut.orderservice.service.OrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -12,7 +10,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -66,11 +63,19 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
+    @PostMapping("/{orderId}/items")
+    public ResponseEntity<OrderResponse> addOrderItem(
+            @PathVariable("orderId") UUID orderId,
+            @Valid @RequestBody OrderItemRequest req) {
+        OrderResponse response = orderService.addOrderItem(orderId, req);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
     @PatchMapping("/{orderId}/items/{itemId}")
     public ResponseEntity<OrderResponse> updateOrderItem(
             @PathVariable("orderId") UUID orderId,
             @PathVariable("itemId") UUID itemId,
-            @Valid @RequestBody UpdateOrderItemRequest req
+            @Valid @RequestBody OrderItemUpdateRequest req
     ) {
         OrderResponse response = orderService.updateOrderItem(orderId, itemId, req);
         return ResponseEntity.status(HttpStatus.OK).body(response);

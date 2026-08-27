@@ -2,10 +2,7 @@ package dev.erkut.orderservice.service;
 
 import dev.erkut.orderservice.dev.MockCustomerData;
 import dev.erkut.orderservice.dev.MockProductData;
-import dev.erkut.orderservice.dto.OrderCreateRequest;
-import dev.erkut.orderservice.dto.OrderItemCreateRequest;
-import dev.erkut.orderservice.dto.OrderResponse;
-import dev.erkut.orderservice.dto.UpdateOrderItemRequest;
+import dev.erkut.orderservice.dto.*;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
 import dev.erkut.orderservice.exception.OrderNotFoundException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
@@ -20,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -42,7 +38,7 @@ public class OrderService {
         Order order = Order.create(req.customerId(), req.currency(), now);
 
         // get product info
-        for (OrderItemCreateRequest itemRequest : req.items()) {
+        for (OrderItemRequest itemRequest : req.items()) {
 
             MockProductData.MockProduct product = MockProductData.PRODUCTS.get(itemRequest.itemId());
 
@@ -104,7 +100,27 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse updateOrderItem(UUID orderId, UUID itemId, UpdateOrderItemRequest req) {
+    public OrderResponse addOrderItem(UUID orderId, OrderItemRequest req) {
+        Order order = findOrderById(orderId);
+        MockProductData.MockProduct product =
+                MockProductData.PRODUCTS.get(req.itemId());
+
+        if(product == null) {
+            throw new ProductNotFoundException("Product not found: " + req.itemId());
+        }
+
+        order.addItem(
+                req.itemId(),
+                product.name(),
+                product.price(),
+                req.quantity(),
+                Instant.now()
+        );
+        return OrderMapper.toResponse(order);
+    }
+
+    @Transactional
+    public OrderResponse updateOrderItem(UUID orderId, UUID itemId, OrderItemUpdateRequest req) {
         Order order = findOrderById(orderId);
         order.changeItemQuantity(
                 itemId,
