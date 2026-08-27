@@ -85,18 +85,6 @@ public class Order {
             throw new IllegalArgumentException("Item id cannot be null");
         }
 
-        if (itemNameSnapshot == null || itemNameSnapshot.isBlank()) {
-            throw new IllegalArgumentException("Item name cannot be blank");
-        }
-
-        if (itemPriceSnapshot == null || itemPriceSnapshot.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Item price must be greater than zero");
-        }
-
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-
         OrderItem existingItem = items.stream()
                 .filter(item -> item.hasItemId(itemId))
                 .findFirst()
@@ -104,10 +92,8 @@ public class Order {
 
         if (existingItem != null) {
             existingItem.increaseQuantity(quantity);
-
             calculateTotalAmount();
             updateTime(now);
-
             return;
         }
 
@@ -179,6 +165,18 @@ public class Order {
         updateTime(now);
     }
 
+    public void changeItemQuantity(UUID itemId, int quantity, Instant now) {
+        ensureOrderEditable();
+        validateUpdateTime(now);
+
+        OrderItem item = findItem(itemId);
+
+        item.changeQuantity(quantity);
+
+        calculateTotalAmount();
+        updateTime(now);
+    }
+
     private OrderItem findItem(UUID itemId) {
         if (itemId == null) {
             throw new IllegalArgumentException("Item id cannot be null");
@@ -210,10 +208,6 @@ public class Order {
     private void ensureHasItems() {
         if (items.isEmpty()) {
             throw new IllegalStateException("Order must contain at least one item");
-        }
-
-        if (totalAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("Total amount must be greater than zero");
         }
     }
 

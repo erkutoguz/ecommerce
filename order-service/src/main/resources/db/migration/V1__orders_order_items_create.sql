@@ -39,7 +39,7 @@ CREATE TABLE order_items(
                         CHECK(item_price_snapshot > 0),
 
     CONSTRAINT chk_order_item_quantity
-                        CHECK(quantity >= 0),
+                        CHECK(quantity > 0),
 
     CONSTRAINT uk_order_items_order_item
                         UNIQUE (order_id, item_id)

@@ -3,6 +3,7 @@ package dev.erkut.orderservice.model;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.UUID;
 
 @Entity
@@ -66,7 +67,7 @@ public class OrderItem {
         this.order = order;
         this.itemId = itemId;
         this.itemNameSnapshot = itemNameSnapshot;
-        this.itemPriceSnapshot = itemPriceSnapshot;
+        this.itemPriceSnapshot = validateMoney(itemPriceSnapshot);
         this.quantity = quantity;
     }
 
@@ -86,6 +87,13 @@ public class OrderItem {
         );
     }
 
+    void changeQuantity(int quantity) {
+        if(quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero");
+        }
+        this.quantity = quantity;
+    }
+
     void increaseQuantity(int amount) {
         if (amount <= 0) {
             throw new IllegalArgumentException("Increase amount must be greater than zero");
@@ -93,6 +101,19 @@ public class OrderItem {
 
         this.quantity += amount;
     }
+
+    private static BigDecimal validateMoney(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Item price must be greater than zero");
+        }
+
+        try {
+            return value.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException("Item price must have at most 2 decimal places");
+        }
+    }
+
 
     BigDecimal calculateTotalAmount() {
         return itemPriceSnapshot.multiply(BigDecimal.valueOf(quantity));
