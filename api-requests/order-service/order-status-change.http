@@ -1,0 +1,14 @@
+### Confirm order
+POST http://localhost:4000/orders/00000025-1111-4111-8111-000000000025/confirm
+
+###
+
+### Reject order
+POST http://localhost:4000/orders/00000025-1111-4111-8111-000000000025/reject
+
+###
+
+### Cancel order
+POST http://localhost:4000/orders/00000025-1111-4111-8111-000000000025/cancel
+
+###

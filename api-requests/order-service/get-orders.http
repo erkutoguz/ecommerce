@@ -1,0 +1,14 @@
+### Get all orders
+GET http://localhost:4000/orders
+
+###
+
+### Get order with id
+GET http://localhost:4000/orders/00000002-1111-4111-8111-000000000002
+
+###
+
+### Get customer orders
+GET http://localhost:4000/orders?customerId=00000005-aaaa-4aaa-8aaa-000000000005&page=1&size=2
+
+###
