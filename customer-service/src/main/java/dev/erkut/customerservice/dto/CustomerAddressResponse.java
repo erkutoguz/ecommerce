@@ -1,4 +1,10 @@
 package dev.erkut.customerservice.dto;
 
-public record CustomerAddressResponse() {
-}
+import java.util.UUID;
+
+public record CustomerAddressResponse(
+   UUID customerAddressId,
+   String fullAddress,
+   String city,
+   String country
+) {}
