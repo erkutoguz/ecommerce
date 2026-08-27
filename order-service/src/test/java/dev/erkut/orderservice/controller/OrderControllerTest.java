@@ -1,8 +1,10 @@
 package dev.erkut.orderservice.controller;
 
 import dev.erkut.orderservice.dto.OrderResponse;
+import dev.erkut.orderservice.dto.OrderItemRequest;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
 import dev.erkut.orderservice.exception.GlobalExceptionHandler;
+import dev.erkut.orderservice.exception.InvalidOrderStateException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
 import dev.erkut.orderservice.model.Currency;
 import dev.erkut.orderservice.model.OrderStatus;
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.data.domain.Page;
@@ -23,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -151,6 +155,81 @@ class OrderControllerTest {
                         .contentType("application/json")
                         .content(requestBody))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void addOrderItem_validRequest_shouldReturnSuccessStatus() throws Exception {
+        // Arrange
+        when(orderService.addOrderItem(eq(ORDER_ID), eq(new OrderItemRequest(PRODUCT_ID, 2))))
+                .thenReturn(orderResponse());
+
+        // Act
+        // Assert
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":2}"))
+                .andExpect(status().isOk());
+        verify(orderService).addOrderItem(ORDER_ID, new OrderItemRequest(PRODUCT_ID, 2));
+    }
+
+    @Test
+    void addOrderItem_invalidQuantity_shouldReturnBadRequest() throws Exception {
+        // Arrange
+
+        // Act
+        // Assert
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":0}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":-1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void addOrderItem_missingOrNullItemId_shouldReturnBadRequest() throws Exception {
+        // Arrange
+
+        // Act
+        // Assert
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":1}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":null,\"quantity\":1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void addOrderItem_productNotFound_shouldReturnNotFound() throws Exception {
+        // Arrange
+        when(orderService.addOrderItem(eq(ORDER_ID), any(OrderItemRequest.class)))
+                .thenThrow(new ProductNotFoundException("Product not found"));
+
+        // Act
+        // Assert
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000099\",\"quantity\":1}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void addOrderItem_nonPendingOrder_shouldReturnConflict() throws Exception {
+        // Arrange
+        when(orderService.addOrderItem(eq(ORDER_ID), any(OrderItemRequest.class)))
+                .thenThrow(new InvalidOrderStateException("Order cannot be modified"));
+
+        // Act
+        // Assert
+        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":1}"))
+                .andExpect(status().isConflict());
     }
 
     @Test

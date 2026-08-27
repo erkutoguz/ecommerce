@@ -1,14 +1,14 @@
 package dev.erkut.orderservice.service;
 
 import dev.erkut.orderservice.dto.OrderCreateRequest;
-import dev.erkut.orderservice.dto.OrderItemCreateRequest;
+import dev.erkut.orderservice.dto.OrderItemRequest;
 import dev.erkut.orderservice.dto.OrderResponse;
-import dev.erkut.orderservice.dto.UpdateOrderItemRequest;
+import dev.erkut.orderservice.dto.OrderItemUpdateRequest;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
+import dev.erkut.orderservice.exception.InvalidOrderStateException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
 import dev.erkut.orderservice.model.Currency;
 import dev.erkut.orderservice.model.Order;
-import dev.erkut.orderservice.model.OrderStatus;
 import dev.erkut.orderservice.repository.OrderRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +29,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -58,7 +59,7 @@ class OrderServiceTest {
         OrderCreateRequest request = new OrderCreateRequest(
                 KNOWN_CUSTOMER_ID,
                 Currency.TRY,
-                List.of(new OrderItemCreateRequest(KNOWN_PRODUCT_ID, 2))
+                List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 2))
         );
         Order savedOrder = Order.create(KNOWN_CUSTOMER_ID, Currency.TRY, java.time.Instant.parse("2026-01-01T10:00:00Z"));
         savedOrder.addItem(
@@ -83,7 +84,7 @@ class OrderServiceTest {
         OrderCreateRequest request = new OrderCreateRequest(
                 UNKNOWN_CUSTOMER_ID,
                 Currency.TRY,
-                List.of(new OrderItemCreateRequest(KNOWN_PRODUCT_ID, 1))
+                List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 1))
         );
 
         // Act
@@ -98,12 +99,90 @@ class OrderServiceTest {
         OrderCreateRequest request = new OrderCreateRequest(
                 KNOWN_CUSTOMER_ID,
                 Currency.TRY,
-                List.of(new OrderItemCreateRequest(UNKNOWN_PRODUCT_ID, 1))
+                List.of(new OrderItemRequest(UNKNOWN_PRODUCT_ID, 1))
         );
 
         // Act
         // Assert
         assertThrows(ProductNotFoundException.class, () -> orderService.createOrder(request));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void addOrderItem_validNewItem_shouldAddItemAndReturnUpdatedOrder() {
+        // Arrange
+        Order order = orderWithItem(KNOWN_CUSTOMER_ID, KNOWN_PRODUCT_ID, 1);
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        // Act
+        OrderResponse response = orderService.addOrderItem(
+                ORDER_ID,
+                new OrderItemRequest(SECOND_PRODUCT_ID, 2)
+        );
+
+        // Assert
+        assertEquals(2, response.items().size());
+        assertEquals(SECOND_PRODUCT_ID, response.items().get(1).itemId());
+        assertEquals(2, response.items().get(1).quantity());
+        assertEquals(new BigDecimal("4300.00"), response.totalAmount());
+        assertTrue(response.updatedAt().isAfter(UPDATED_AT));
+        verify(orderRepository).findById(ORDER_ID);
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void addOrderItem_existingItem_shouldIncreaseQuantityWithoutDuplicate() {
+        // Arrange
+        Order order = orderWithItem(KNOWN_CUSTOMER_ID, KNOWN_PRODUCT_ID, 2);
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        // Act
+        OrderResponse response = orderService.addOrderItem(
+                ORDER_ID,
+                new OrderItemRequest(KNOWN_PRODUCT_ID, 3)
+        );
+
+        // Assert
+        assertEquals(1, response.items().size());
+        assertEquals(5, response.items().get(0).quantity());
+        assertEquals(new BigDecimal("12500.00"), response.totalAmount());
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void addOrderItem_unknownProduct_shouldThrowProductNotFoundException() {
+        // Arrange
+        Order order = orderWithItem(KNOWN_CUSTOMER_ID, KNOWN_PRODUCT_ID, 1);
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        // Act
+        // Assert
+        assertThrows(
+                ProductNotFoundException.class,
+                () -> orderService.addOrderItem(
+                        ORDER_ID,
+                        new OrderItemRequest(UNKNOWN_PRODUCT_ID, 1)
+                )
+        );
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void addOrderItem_nonPendingOrder_shouldThrowInvalidOrderStateException() {
+        // Arrange
+        Order order = orderWithItem(KNOWN_CUSTOMER_ID, KNOWN_PRODUCT_ID, 1);
+        order.confirm(UPDATED_AT);
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        // Act
+        // Assert
+        assertThrows(
+                InvalidOrderStateException.class,
+                () -> orderService.addOrderItem(
+                        ORDER_ID,
+                        new OrderItemRequest(SECOND_PRODUCT_ID, 1)
+                )
+        );
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -117,7 +196,7 @@ class OrderServiceTest {
         var response = orderService.updateOrderItem(
                 ORDER_ID,
                 KNOWN_PRODUCT_ID,
-                new UpdateOrderItemRequest(3)
+                new OrderItemUpdateRequest(3)
         );
 
         // Assert
