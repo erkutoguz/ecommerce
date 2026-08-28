@@ -1,5 +1,11 @@
-### GET request to example server
-GET https://examples.http-client.intellij.net/get
-    ?generated-in=IntelliJ IDEA
+### Creates a new customer entity
+POST http://localhost:4001/customers
+Content-Type: application/json
+
+{
+  "email": "erkutoguz@mail.com",
+  "name": "erkut oğuz",
+  "phone": "5554443322"
+}
 
 ###

@@ -1,0 +1,17 @@
+### Add customer an address
+POST http://localhost:4001/customers/10000000-0000-0000-0000-000000000008/addresses
+Content-Type: application/json
+
+{
+    "fullAddress": "662 sk. cumhuriyet mh.",
+    "city": "antalya",
+    "country": "TR"
+}
+
+###
+
+### Remove address from customer
+DELETE http://localhost:4001/customers/10000000-0000-0000-0000-000000000011/addresses/20000000-0000-0000-0000-000000000014
+
+###
+
