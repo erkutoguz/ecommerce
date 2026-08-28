@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: customer-service
+              uri: ${CUSTOMER_SERVICE_URL:http://localhost:4001}
+              predicates:
+                - Path=/customers/**
+
+            - id: order-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:4000}
+              predicates:
+                - Path=/orders/**
+
+server:
+  port: 4002
