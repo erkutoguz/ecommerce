@@ -3,7 +3,9 @@ package dev.erkut.orderservice.controller;
 import dev.erkut.orderservice.dto.OrderResponse;
 import dev.erkut.orderservice.dto.OrderItemRequest;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
+import dev.erkut.orderservice.exception.CustomerServiceUnavailableException;
 import dev.erkut.orderservice.exception.GlobalExceptionHandler;
+import dev.erkut.orderservice.exception.InvalidCustomerStateException;
 import dev.erkut.orderservice.exception.InvalidOrderStateException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
 import dev.erkut.orderservice.model.Currency;
@@ -129,6 +131,30 @@ class OrderControllerTest {
                         .contentType("application/json")
                         .content(requestBody))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createOrder_inactiveCustomer_shouldReturnConflict() throws Exception {
+        when(orderService.createOrder(any()))
+                .thenThrow(new InvalidCustomerStateException("Customer is not active"));
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreateOrderRequest()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Customer is not active"));
+    }
+
+    @Test
+    void createOrder_customerServiceUnavailable_shouldReturn503WithErrorContract() throws Exception {
+        when(orderService.createOrder(any()))
+                .thenThrow(new CustomerServiceUnavailableException("Customer service unavailable"));
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreateOrderRequest()))
+                .andExpect(jsonPath("$.error").value("Customer service unavailable"))
+                .andExpect(status().isServiceUnavailable());
     }
 
     @Test
@@ -301,6 +327,21 @@ class OrderControllerTest {
 
     private Page<OrderResponse> pageOfOrders() {
         return new PageImpl<>(List.of(orderResponse()), PageRequest.of(0, 10), 1);
+    }
+
+    private String validCreateOrderRequest() {
+        return """
+                {
+                  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                  "currency": "TRY",
+                  "items": [
+                    {
+                      "itemId": "90000000-0000-0000-0000-000000000001",
+                      "quantity": 1
+                    }
+                  ]
+                }
+                """;
     }
 
     private OrderResponse orderResponse() {

@@ -72,7 +72,7 @@
             Map<String, String> errors = new HashMap<>();
 
             errors.put("error", ex.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errors);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errors);
         }
 
         @ExceptionHandler(InvalidCustomerStateException.class)
