@@ -1,0 +1,4 @@
+### Delete product
+DELETE http://localhost:4003/products/d0000000-0000-0000-0000-000000000002
+
+###
