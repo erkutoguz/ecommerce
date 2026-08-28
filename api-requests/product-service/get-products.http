@@ -1,9 +1,18 @@
-### Get product with id
-GET http://localhost:4003/products/d0000000-0000-0000-0000-000000000002
+### Get product by id
+GET {{productBaseUrl}}/products/{{productId}}
 
-###
 
-### Get all products
-GET http://localhost:4003/products
+### Get inactive product
+GET {{productBaseUrl}}/products/{{inactiveProductId}}
 
-###
+
+### Get products
+GET {{productBaseUrl}}/products?page=0&size=10
+
+
+### Get second page
+GET {{productBaseUrl}}/products?page=1&size=10
+
+
+### Product not found - expect 404
+GET {{productBaseUrl}}/products/99999999-9999-9999-9999-999999999999

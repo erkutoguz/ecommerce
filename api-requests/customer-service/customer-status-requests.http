@@ -1,0 +1,6 @@
+### Deactivate customer
+POST {{customerBaseUrl}}/customers/{{customerId}}/deactivate
+
+
+### Deactivate already inactive customer - idempotent
+POST {{customerBaseUrl}}/customers/{{inactiveCustomerId}}/deactivate

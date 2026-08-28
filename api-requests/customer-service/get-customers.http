@@ -1,9 +1,22 @@
-### Get customer with customer id
-GET http://localhost:4001/customers/10000000-0000-0000-0000-000000000011
+### Get customer by id
+GET {{customerBaseUrl}}/customers/{{customerId}}
 
-###
 
-### Get customer with pagination
-GET http://localhost:4001/customers?page=0&size=5
+### Get inactive customer
+GET {{customerBaseUrl}}/customers/{{inactiveCustomerId}}
 
-###
+
+### Get customers - first page
+GET {{customerBaseUrl}}/customers?page=0&size=10
+
+
+### Get customers - second page
+GET {{customerBaseUrl}}/customers?page=1&size=10
+
+
+### Invalid page - expect 400
+GET {{customerBaseUrl}}/customers?page=-1&size=10
+
+
+### Customer not found - expect 404
+GET {{customerBaseUrl}}/customers/99999999-9999-9999-9999-999999999999

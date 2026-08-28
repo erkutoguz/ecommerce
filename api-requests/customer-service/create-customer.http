@@ -1,11 +1,40 @@
-### Creates a new customer entity
-POST http://localhost:4001/customers
+### Create customer
+POST {{customerBaseUrl}}/customers
 Content-Type: application/json
 
 {
-  "email": "erkutoguz@mail.com",
-  "name": "erkut oğuz",
-  "phone": "5554443322"
+  "name": "Test Customer",
+  "email": "test.customer@example.com",
+  "phone": "+905551112233"
 }
 
-###
+
+### Create customer without phone
+POST {{customerBaseUrl}}/customers
+Content-Type: application/json
+
+{
+  "name": "Customer Without Phone",
+  "email": "no.phone@example.com"
+}
+
+
+### Duplicate email - expect 409
+POST {{customerBaseUrl}}/customers
+Content-Type: application/json
+
+{
+  "name": "Duplicate Customer",
+  "email": "ahmet.yilmaz@example.com",
+  "phone": "+905559999999"
+}
+
+
+### Invalid customer - expect 400
+POST {{customerBaseUrl}}/customers
+Content-Type: application/json
+
+{
+  "name": "",
+  "email": "invalid-email"
+}

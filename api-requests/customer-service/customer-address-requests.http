@@ -1,17 +1,24 @@
-### Add customer an address
-POST http://localhost:4001/customers/10000000-0000-0000-0000-000000000008/addresses
+### Add address
+POST {{customerBaseUrl}}/customers/{{customerId}}/addresses
 Content-Type: application/json
 
 {
-    "fullAddress": "662 sk. cumhuriyet mh.",
-    "city": "antalya",
-    "country": "TR"
+  "fullAddress": "Bagdat Caddesi No 100 Kadikoy",
+  "city": "Istanbul",
+  "country": "Turkey"
 }
 
-###
 
-### Remove address from customer
-DELETE http://localhost:4001/customers/10000000-0000-0000-0000-000000000011/addresses/20000000-0000-0000-0000-000000000014
+### Add address to inactive customer - expect 409
+POST {{customerBaseUrl}}/customers/{{inactiveCustomerId}}/addresses
+Content-Type: application/json
 
-###
+{
+  "fullAddress": "Test Address No 10",
+  "city": "Istanbul",
+  "country": "Turkey"
+}
 
+
+### Remove address
+DELETE {{customerBaseUrl}}/customers/{{customerId}}/addresses/a0000000-0000-0000-0000-000000000001

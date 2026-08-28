@@ -1,4 +1,14 @@
 ### Deactivate product
-POST http://localhost:4003/products/d0000000-0000-0000-0000-000000000002/deactivate
+POST {{productBaseUrl}}/products/{{productId}}/deactivate
 
-###
+
+### Deactivate already inactive product
+POST {{productBaseUrl}}/products/{{inactiveProductId}}/deactivate
+
+
+### Delete product
+DELETE {{productBaseUrl}}/products/{{productId}}
+
+
+### Delete missing product - expect 404
+DELETE {{productBaseUrl}}/products/99999999-9999-9999-9999-999999999999
