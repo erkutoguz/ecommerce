@@ -16,6 +16,5 @@ public record OrderCreateRequest(
         Currency currency,
 
         @NotEmpty
-        @Valid
-        List<OrderItemRequest> items
+        List<@Valid OrderItemRequest> items
 ) {}

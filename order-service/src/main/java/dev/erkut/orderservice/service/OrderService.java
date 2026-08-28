@@ -1,14 +1,18 @@
 package dev.erkut.orderservice.service;
 
+import dev.erkut.orderservice.client.customer.CustomerClient;
 import dev.erkut.orderservice.dev.MockCustomerData;
 import dev.erkut.orderservice.dev.MockProductData;
 import dev.erkut.orderservice.dto.*;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
+import dev.erkut.orderservice.exception.InvalidCustomerStateException;
 import dev.erkut.orderservice.exception.OrderNotFoundException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
 import dev.erkut.orderservice.mapper.OrderMapper;
+import dev.erkut.orderservice.model.CustomerStatus;
 import dev.erkut.orderservice.model.Order;
 import dev.erkut.orderservice.repository.OrderRepository;
+import dev.erkut.orderservice.response.CustomerClientResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,20 +26,23 @@ import java.util.UUID;
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
+    private final CustomerClient customerClient;
 
-    public OrderService(OrderRepository orderRepository) {
+    public OrderService(OrderRepository orderRepository, CustomerClient customerClient) {
         this.orderRepository = orderRepository;
+        this.customerClient = customerClient;
     }
 
     @Transactional
     public OrderResponse createOrder(OrderCreateRequest req) {
-        // check customer with id req.customerId()
-        if(!MockCustomerData.CUSTOMER_IDS.contains(req.customerId())) {
-            throw new CustomerNotFoundException("Customer not found with id: " + req.customerId());
+        CustomerClientResponse customerClientResponse = customerClient.getCustomerDetail(req.customerId());
+
+        if(customerClientResponse.status() != CustomerStatus.ACTIVE) {
+            throw new InvalidCustomerStateException("Customer is not active: " + customerClientResponse.customerId());
         }
 
         Instant now = Instant.now();
-        Order order = Order.create(req.customerId(), req.currency(), now);
+        Order order = Order.create(customerClientResponse.customerId(), req.currency(), now);
 
         // get product info
         for (OrderItemRequest itemRequest : req.items()) {

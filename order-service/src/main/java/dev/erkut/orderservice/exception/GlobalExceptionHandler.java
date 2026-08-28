@@ -66,4 +66,20 @@
             errors.put("error", ex.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errors);
         }
+
+        @ExceptionHandler(CustomerServiceUnavailableException.class)
+        public ResponseEntity<Map<String, String>> handleCustomerServiceUnavailableException(CustomerServiceUnavailableException ex) {
+            Map<String, String> errors = new HashMap<>();
+
+            errors.put("error", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errors);
+        }
+
+        @ExceptionHandler(InvalidCustomerStateException.class)
+        public ResponseEntity<Map<String, String>> handleInvalidCustomerStateException(InvalidCustomerStateException ex) {
+            Map<String, String> errors = new HashMap<>();
+
+            errors.put("error", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errors);
+        }
     }

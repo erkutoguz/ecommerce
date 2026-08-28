@@ -1,15 +1,19 @@
 package dev.erkut.orderservice.service;
 
+import dev.erkut.orderservice.client.customer.CustomerClient;
 import dev.erkut.orderservice.dto.OrderCreateRequest;
 import dev.erkut.orderservice.dto.OrderItemRequest;
 import dev.erkut.orderservice.dto.OrderResponse;
 import dev.erkut.orderservice.dto.OrderItemUpdateRequest;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
 import dev.erkut.orderservice.exception.InvalidOrderStateException;
+import dev.erkut.orderservice.exception.InvalidCustomerStateException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
 import dev.erkut.orderservice.model.Currency;
+import dev.erkut.orderservice.model.CustomerStatus;
 import dev.erkut.orderservice.model.Order;
 import dev.erkut.orderservice.repository.OrderRepository;
+import dev.erkut.orderservice.response.CustomerClientResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -50,6 +54,9 @@ class OrderServiceTest {
     @Mock
     private OrderRepository orderRepository;
 
+    @Mock
+    private CustomerClient customerClient;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -61,6 +68,8 @@ class OrderServiceTest {
                 Currency.TRY,
                 List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 2))
         );
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
         Order savedOrder = Order.create(KNOWN_CUSTOMER_ID, Currency.TRY, java.time.Instant.parse("2026-01-01T10:00:00Z"));
         savedOrder.addItem(
                 KNOWN_PRODUCT_ID,
@@ -76,6 +85,23 @@ class OrderServiceTest {
 
         // Assert
         verify(orderRepository).save(any(Order.class));
+        verify(customerClient).getCustomerDetail(request.customerId());
+    }
+
+    @Test
+    void createOrder_inactiveCustomer_shouldThrowInvalidCustomerStateExceptionWithoutSaving() {
+        OrderCreateRequest request = new OrderCreateRequest(
+                KNOWN_CUSTOMER_ID,
+                Currency.TRY,
+                List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 1))
+        );
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.INACTIVE));
+
+        assertThrows(InvalidCustomerStateException.class, () -> orderService.createOrder(request));
+
+        verify(customerClient).getCustomerDetail(request.customerId());
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
@@ -86,10 +112,13 @@ class OrderServiceTest {
                 Currency.TRY,
                 List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 1))
         );
+        when(customerClient.getCustomerDetail(UNKNOWN_CUSTOMER_ID))
+                .thenThrow(new CustomerNotFoundException("Customer not found"));
 
         // Act
         // Assert
         assertThrows(CustomerNotFoundException.class, () -> orderService.createOrder(request));
+        verify(customerClient).getCustomerDetail(request.customerId());
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -101,6 +130,8 @@ class OrderServiceTest {
                 Currency.TRY,
                 List.of(new OrderItemRequest(UNKNOWN_PRODUCT_ID, 1))
         );
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
 
         // Act
         // Assert

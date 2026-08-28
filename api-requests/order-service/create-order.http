@@ -3,7 +3,7 @@ POST http://localhost:4000/orders
 Content-Type: application/json
 
 {
-  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "customerId": "10000000-0000-0000-0000-000000000011",
   "currency": "TRY",
   "items": [
     {
