@@ -1,6 +1,7 @@
 package dev.erkut.customerservice.model;
 
 import dev.erkut.customerservice.exception.AddressNotFoundException;
+import dev.erkut.customerservice.exception.InvalidCustomerStateException;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -70,12 +71,13 @@ public class Customer {
         return new Customer(name, email, phone, now);
     }
 
-    public void addAddress(String fullAddress, String city, String country, Instant now) {
+    public CustomerAddress addAddress(String fullAddress, String city, String country, Instant now) {
         ensureCustomerEditable();
         validateUpdateTime(now);
         CustomerAddress address = CustomerAddress.create(this, fullAddress, city, country);
         addresses.add(address);
         updateTime(now);
+        return address;
     }
 
     public void removeAddress(UUID addressId, Instant now) {
@@ -86,7 +88,7 @@ public class Customer {
         updateTime(now);
     }
 
-    public void makeCustomerInactive(Instant now) {
+    public void deactivateCustomer(Instant now) {
         if(status == CustomerStatus.INACTIVE) {
             return;
         }
@@ -105,7 +107,7 @@ public class Customer {
 
     private void ensureCustomerEditable() {
         if (status != CustomerStatus.ACTIVE) {
-            throw new IllegalStateException("Customer cannot be modified with status " + status);
+            throw new InvalidCustomerStateException("Customer cannot be modified with status " + status);
         }
     }
 

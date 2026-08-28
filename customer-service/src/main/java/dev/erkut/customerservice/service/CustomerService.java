@@ -1,12 +1,19 @@
 package dev.erkut.customerservice.service;
 
 import dev.erkut.customerservice.dto.CustomerAddressCreateRequest;
+import dev.erkut.customerservice.dto.CustomerAddressResponse;
 import dev.erkut.customerservice.dto.CustomerCreateRequest;
 import dev.erkut.customerservice.dto.CustomerResponse;
+import dev.erkut.customerservice.exception.CustomerEmailAlreadyExistsException;
 import dev.erkut.customerservice.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.mapper.CustomerMapper;
 import dev.erkut.customerservice.model.Customer;
+import dev.erkut.customerservice.model.CustomerAddress;
 import dev.erkut.customerservice.repository.CustomerRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,17 +34,54 @@ public class CustomerService {
         Instant now = Instant.now();
         Customer customer = Customer.create(req.name(), req.email(), req.phone(), now);
 
+        if(customerRepository.existsByEmail(customer.getEmail())) {
+            throw new CustomerEmailAlreadyExistsException("Customer already exists with email: " + customer.getEmail());
+        }
+
         Customer savedCustomer = customerRepository.save(customer);
         return CustomerMapper.toResponse(savedCustomer);
     }
 
+    @Transactional(readOnly = true)
+    public CustomerResponse getCustomerById(UUID customerId) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+        return CustomerMapper.toResponse(customer);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerResponse> getCustomers(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending()
+                .and(Sort.by(Sort.Direction.DESC, "id")));
+
+        Page<Customer> customers = customerRepository.findAll(pageable);
+        return customers.map(CustomerMapper::toResponse);
+    }
+
     @Transactional
-    public CustomerResponse addCustomerAddress(UUID customerId, CustomerAddressCreateRequest req) {
+    public CustomerResponse deactivateCustomer(UUID customerId) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+        Instant now = Instant.now();
+        customer.deactivateCustomer(now);
+        return CustomerMapper.toResponse(customer);
+    }
+
+    @Transactional
+    public CustomerAddressResponse addCustomerAddress(UUID customerId, CustomerAddressCreateRequest req) {
         Instant now = Instant.now();
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
 
-        customer.addAddress(req.fullAddress(), req.city(), req.country(), now);
-        return CustomerMapper.toResponse(customer);
+        CustomerAddress address = customer.addAddress(req.fullAddress(), req.city(), req.country(), now);
+        customerRepository.flush();
+        return CustomerMapper.toResponse(address);
+    }
+
+    @Transactional
+    public void removeCustomerAddress(UUID customerId, UUID addressId) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+        customer.removeAddress(addressId, Instant.now());
     }
 }

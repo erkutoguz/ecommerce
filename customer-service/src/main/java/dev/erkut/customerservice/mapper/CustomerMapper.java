@@ -20,7 +20,7 @@ public class CustomerMapper {
                 customer.getUpdatedAt());
     }
 
-    private static CustomerAddressResponse toResponse(CustomerAddress customerAddress) {
+    public static CustomerAddressResponse toResponse(CustomerAddress customerAddress) {
         return new CustomerAddressResponse(
                 customerAddress.getId(),
                 customerAddress.getFullAddress(),
