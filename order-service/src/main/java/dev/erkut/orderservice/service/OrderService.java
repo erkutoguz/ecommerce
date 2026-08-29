@@ -1,18 +1,21 @@
 package dev.erkut.orderservice.service;
 
 import dev.erkut.orderservice.client.customer.CustomerClient;
-import dev.erkut.orderservice.dev.MockCustomerData;
+import dev.erkut.orderservice.client.product.ProductClient;
 import dev.erkut.orderservice.dev.MockProductData;
 import dev.erkut.orderservice.dto.*;
-import dev.erkut.orderservice.exception.CustomerNotFoundException;
 import dev.erkut.orderservice.exception.InvalidCustomerStateException;
+import dev.erkut.orderservice.exception.InvalidProductStateException;
 import dev.erkut.orderservice.exception.OrderNotFoundException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
 import dev.erkut.orderservice.mapper.OrderMapper;
 import dev.erkut.orderservice.model.CustomerStatus;
 import dev.erkut.orderservice.model.Order;
 import dev.erkut.orderservice.repository.OrderRepository;
+import dev.erkut.orderservice.request.ProductClientLookupRequest;
 import dev.erkut.orderservice.response.CustomerClientResponse;
+import dev.erkut.orderservice.response.OrderProductResponse;
+import dev.erkut.orderservice.response.ProductStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,48 +24,59 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.UUID;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
     private final CustomerClient customerClient;
-
-    public OrderService(OrderRepository orderRepository, CustomerClient customerClient) {
+    private final ProductClient productClient;
+    private final OrderTransactionalService orderTransactionalService;
+    public OrderService(OrderRepository orderRepository, CustomerClient customerClient, ProductClient productClient, OrderTransactionalService orderTransactionalService) {
         this.orderRepository = orderRepository;
         this.customerClient = customerClient;
+        this.productClient = productClient;
+        this.orderTransactionalService = orderTransactionalService;
     }
 
-    @Transactional
     public OrderResponse createOrder(OrderCreateRequest req) {
-        CustomerClientResponse customerClientResponse = customerClient.getCustomerDetail(req.customerId());
+        CustomerClientResponse customer = customerClient.getCustomerDetail(req.customerId());
 
-        if(customerClientResponse.status() != CustomerStatus.ACTIVE) {
-            throw new InvalidCustomerStateException("Customer is not active: " + customerClientResponse.customerId());
+        if(customer.status() != CustomerStatus.ACTIVE) {
+            throw new InvalidCustomerStateException("Customer is not active: " + customer.customerId());
         }
+
+        Map<UUID, Integer> productQtyMap = new HashMap<>();
+        req.items().forEach(item -> {
+            productQtyMap.put(item.itemId(), productQtyMap.getOrDefault(item.itemId(), 0) + item.quantity());
+        });
+
+        ProductClientLookupRequest lookupRequest = new ProductClientLookupRequest(new ArrayList<>(productQtyMap.keySet()));
+        List<OrderProductResponse> products = productClient.getProductsByIds(lookupRequest);
+
+        products.stream()
+                .filter(product -> product.status() != ProductStatus.ACTIVE)
+                .findFirst()
+                .ifPresent(product -> {
+                    throw new InvalidProductStateException("Product is not active: " + product.productId());
+                });
 
         Instant now = Instant.now();
-        Order order = Order.create(customerClientResponse.customerId(), req.currency(), now);
+        Order order = Order.create(customer.customerId(), req.currency(), now);
 
-        // get product info
-        for (OrderItemRequest itemRequest : req.items()) {
-
-            MockProductData.MockProduct product = MockProductData.PRODUCTS.get(itemRequest.itemId());
-
-            if (product == null) {
-                throw new ProductNotFoundException("Product not found with id: " + itemRequest.itemId());
-            }
-
-            order.addItem(
-                    itemRequest.itemId(),
-                    product.name(),
-                    product.price(),
-                    itemRequest.quantity(),
+        products.forEach(p -> {
+            order.addItem(p.productId(),
+                    p.name(),
+                    p.price(),
+                    productQtyMap.get(p.productId()),
                     now
             );
-        }
+        });
+        
+        Order savedOrder = orderTransactionalService.saveOrder(order);
 
-        Order savedOrder = orderRepository.save(order);
         return OrderMapper.toResponse(savedOrder);
     }
 

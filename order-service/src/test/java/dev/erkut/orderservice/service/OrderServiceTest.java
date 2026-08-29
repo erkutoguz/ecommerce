@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.service;
 
 import dev.erkut.orderservice.client.customer.CustomerClient;
+import dev.erkut.orderservice.client.product.ProductClient;
 import dev.erkut.orderservice.dto.OrderCreateRequest;
 import dev.erkut.orderservice.dto.OrderItemRequest;
 import dev.erkut.orderservice.dto.OrderResponse;
@@ -8,12 +9,17 @@ import dev.erkut.orderservice.dto.OrderItemUpdateRequest;
 import dev.erkut.orderservice.exception.CustomerNotFoundException;
 import dev.erkut.orderservice.exception.InvalidOrderStateException;
 import dev.erkut.orderservice.exception.InvalidCustomerStateException;
+import dev.erkut.orderservice.exception.InvalidProductStateException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
+import dev.erkut.orderservice.exception.ProductServiceUnavailableException;
 import dev.erkut.orderservice.model.Currency;
 import dev.erkut.orderservice.model.CustomerStatus;
 import dev.erkut.orderservice.model.Order;
 import dev.erkut.orderservice.repository.OrderRepository;
+import dev.erkut.orderservice.request.ProductClientLookupRequest;
 import dev.erkut.orderservice.response.CustomerClientResponse;
+import dev.erkut.orderservice.response.OrderProductResponse;
+import dev.erkut.orderservice.response.ProductStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -36,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,11 +64,17 @@ class OrderServiceTest {
     @Mock
     private CustomerClient customerClient;
 
+    @Mock
+    private ProductClient productClient;
+
+    @Mock
+    private OrderTransactionalService orderTransactionalService;
+
     @InjectMocks
     private OrderService orderService;
 
     @Test
-    void createOrder_validRequest_shouldSaveOrder() {
+    void createOrder_activeCustomerAndProducts_shouldBulkLookupAndDelegateAfterValidation() {
         // Arrange
         OrderCreateRequest request = new OrderCreateRequest(
                 KNOWN_CUSTOMER_ID,
@@ -70,22 +83,29 @@ class OrderServiceTest {
         );
         when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
                 .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
-        Order savedOrder = Order.create(KNOWN_CUSTOMER_ID, Currency.TRY, java.time.Instant.parse("2026-01-01T10:00:00Z"));
-        savedOrder.addItem(
-                KNOWN_PRODUCT_ID,
-                "Mechanical Keyboard",
-                new java.math.BigDecimal("2500.00"),
-                2,
-                java.time.Instant.parse("2026-01-01T10:00:00Z")
-        );
-        when(orderRepository.save(any(Order.class))).thenReturn(savedOrder);
+        when(productClient.getProductsByIds(any(ProductClientLookupRequest.class)))
+                .thenReturn(List.of(activeProduct(KNOWN_PRODUCT_ID, "Mechanical Keyboard", "2500.00")));
+        when(orderTransactionalService.saveOrder(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ArgumentCaptor<ProductClientLookupRequest> lookupCaptor =
+                ArgumentCaptor.forClass(ProductClientLookupRequest.class);
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
 
         // Act
-        orderService.createOrder(request);
+        OrderResponse response = orderService.createOrder(request);
 
         // Assert
-        verify(orderRepository).save(any(Order.class));
-        verify(customerClient).getCustomerDetail(request.customerId());
+        verify(productClient).getProductsByIds(lookupCaptor.capture());
+        assertEquals(List.of(KNOWN_PRODUCT_ID), lookupCaptor.getValue().requestedProductIds());
+        verify(orderTransactionalService).saveOrder(orderCaptor.capture());
+        assertEquals(1, orderCaptor.getValue().getItems().size());
+        assertEquals(2, orderCaptor.getValue().getItems().getFirst().getQuantity());
+        assertEquals(2, response.items().getFirst().quantity());
+        verify(orderRepository, never()).save(any(Order.class));
+        var order = inOrder(customerClient, productClient, orderTransactionalService);
+        order.verify(customerClient).getCustomerDetail(request.customerId());
+        order.verify(productClient).getProductsByIds(any(ProductClientLookupRequest.class));
+        order.verify(orderTransactionalService).saveOrder(any(Order.class));
     }
 
     @Test
@@ -101,6 +121,98 @@ class OrderServiceTest {
         assertThrows(InvalidCustomerStateException.class, () -> orderService.createOrder(request));
 
         verify(customerClient).getCustomerDetail(request.customerId());
+        verify(productClient, never()).getProductsByIds(any(ProductClientLookupRequest.class));
+        verify(orderTransactionalService, never()).saveOrder(any(Order.class));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_duplicateProducts_shouldLookupUniqueIdsAndNormalizeQuantities() {
+        OrderCreateRequest request = new OrderCreateRequest(
+                KNOWN_CUSTOMER_ID,
+                Currency.TRY,
+                List.of(
+                        new OrderItemRequest(KNOWN_PRODUCT_ID, 2),
+                        new OrderItemRequest(SECOND_PRODUCT_ID, 1),
+                        new OrderItemRequest(KNOWN_PRODUCT_ID, 3)
+                )
+        );
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
+        when(productClient.getProductsByIds(any(ProductClientLookupRequest.class)))
+                .thenReturn(List.of(
+                        activeProduct(SECOND_PRODUCT_ID, "Wireless Mouse", "900.00"),
+                        activeProduct(KNOWN_PRODUCT_ID, "Mechanical Keyboard", "2500.00")
+                ));
+        when(orderTransactionalService.saveOrder(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        ArgumentCaptor<ProductClientLookupRequest> lookupCaptor =
+                ArgumentCaptor.forClass(ProductClientLookupRequest.class);
+
+        OrderResponse response = orderService.createOrder(request);
+
+        verify(productClient).getProductsByIds(lookupCaptor.capture());
+        assertEquals(2, lookupCaptor.getValue().requestedProductIds().size());
+        assertEquals(
+                java.util.Set.of(KNOWN_PRODUCT_ID, SECOND_PRODUCT_ID),
+                java.util.Set.copyOf(lookupCaptor.getValue().requestedProductIds()));
+        assertEquals(2, response.items().size());
+        assertEquals(5, response.items().stream()
+                .filter(item -> item.itemId().equals(KNOWN_PRODUCT_ID))
+                .findFirst().orElseThrow().quantity());
+        assertEquals(1, response.items().stream()
+                .filter(item -> item.itemId().equals(SECOND_PRODUCT_ID))
+                .findFirst().orElseThrow().quantity());
+        verify(orderTransactionalService).saveOrder(any(Order.class));
+    }
+
+    @Test
+    void createOrder_inactiveProduct_shouldThrowWithoutSaving() {
+        OrderCreateRequest request = new OrderCreateRequest(
+                KNOWN_CUSTOMER_ID, Currency.TRY,
+                List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 1)));
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
+        when(productClient.getProductsByIds(any(ProductClientLookupRequest.class)))
+                .thenReturn(List.of(
+                        activeProduct(KNOWN_PRODUCT_ID, "Keyboard", "2500.00"),
+                        new OrderProductResponse(SECOND_PRODUCT_ID, "Mouse", new BigDecimal("900.00"), ProductStatus.INACTIVE)));
+
+        assertThrows(InvalidProductStateException.class, () -> orderService.createOrder(request));
+
+        verify(orderTransactionalService, never()).saveOrder(any(Order.class));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_productNotFoundFromClient_shouldPropagateWithoutSaving() {
+        OrderCreateRequest request = new OrderCreateRequest(
+                KNOWN_CUSTOMER_ID, Currency.TRY,
+                List.of(new OrderItemRequest(UNKNOWN_PRODUCT_ID, 1)));
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
+        when(productClient.getProductsByIds(any(ProductClientLookupRequest.class)))
+                .thenThrow(new ProductNotFoundException("Product(s) not found"));
+
+        assertThrows(ProductNotFoundException.class, () -> orderService.createOrder(request));
+
+        verify(orderTransactionalService, never()).saveOrder(any(Order.class));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_productServiceUnavailableFromClient_shouldPropagateWithoutSaving() {
+        OrderCreateRequest request = new OrderCreateRequest(
+                KNOWN_CUSTOMER_ID, Currency.TRY,
+                List.of(new OrderItemRequest(KNOWN_PRODUCT_ID, 1)));
+        when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
+                .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
+        when(productClient.getProductsByIds(any(ProductClientLookupRequest.class)))
+                .thenThrow(new ProductServiceUnavailableException("Product service unavailable"));
+
+        assertThrows(ProductServiceUnavailableException.class, () -> orderService.createOrder(request));
+
+        verify(orderTransactionalService, never()).saveOrder(any(Order.class));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -119,6 +231,8 @@ class OrderServiceTest {
         // Assert
         assertThrows(CustomerNotFoundException.class, () -> orderService.createOrder(request));
         verify(customerClient).getCustomerDetail(request.customerId());
+        verify(productClient, never()).getProductsByIds(any(ProductClientLookupRequest.class));
+        verify(orderTransactionalService, never()).saveOrder(any(Order.class));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -132,10 +246,14 @@ class OrderServiceTest {
         );
         when(customerClient.getCustomerDetail(KNOWN_CUSTOMER_ID))
                 .thenReturn(new CustomerClientResponse(KNOWN_CUSTOMER_ID, CustomerStatus.ACTIVE));
+        when(productClient.getProductsByIds(any(ProductClientLookupRequest.class)))
+                .thenThrow(new ProductNotFoundException("Product(s) not found"));
 
         // Act
         // Assert
         assertThrows(ProductNotFoundException.class, () -> orderService.createOrder(request));
+        verify(productClient).getProductsByIds(any(ProductClientLookupRequest.class));
+        verify(orderTransactionalService, never()).saveOrder(any(Order.class));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -303,5 +421,9 @@ class OrderServiceTest {
         Order order = Order.create(customerId, Currency.TRY, CREATED_AT);
         order.addItem(itemId, "Test Product", new BigDecimal("2500.00"), quantity, UPDATED_AT);
         return order;
+    }
+
+    private OrderProductResponse activeProduct(UUID productId, String name, String price) {
+        return new OrderProductResponse(productId, name, new BigDecimal(price), ProductStatus.ACTIVE);
     }
 }
