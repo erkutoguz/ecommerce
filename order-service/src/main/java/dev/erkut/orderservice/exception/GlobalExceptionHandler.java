@@ -82,4 +82,20 @@
             errors.put("error", ex.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT).body(errors);
         }
+
+        @ExceptionHandler(ProductServiceUnavailableException.class)
+        public ResponseEntity<Map<String, String>> handleProductServiceUnavailableException(ProductServiceUnavailableException ex) {
+            Map<String, String> errors = new HashMap<>();
+
+            errors.put("error", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errors);
+        }
+
+        @ExceptionHandler(InvalidProductStateException.class)
+        public ResponseEntity<Map<String, String>> handleInvalidProductStateException(InvalidProductStateException ex) {
+            Map<String, String> errors = new HashMap<>();
+
+            errors.put("error", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errors);
+        }
     }
