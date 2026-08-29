@@ -32,7 +32,7 @@ public class ProductClient {
                 return client.post()
                         .uri("/bulk-lookup")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(lookupReq.requestedProductIds())
+                        .body(lookupReq)
                         .retrieve()
                         .onStatus(
                                 status -> status.value() == 404,

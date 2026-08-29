@@ -13,6 +13,10 @@ Content-Type: application/json
     {
       "itemId": "d0000000-0000-0000-0000-000000000002",
       "quantity": 2
+    },
+    {
+      "itemId": "d0000000-0000-0000-0000-000000000002",
+      "quantity": 2
     }
   ]
 }
