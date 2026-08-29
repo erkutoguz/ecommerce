@@ -17,5 +17,10 @@ spring:
               predicates:
                 - Path=/orders/**
 
+            - id: product-service
+              uri: ${PRODUCT_SERVICE_URL:http://localhost:4003}
+              predicates:
+                - Path=/products/**
+
 server:
   port: 4002
