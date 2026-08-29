@@ -1,6 +1,7 @@
 package dev.erkut.productservice;
 
 import dev.erkut.productservice.controller.ProductController;
+import dev.erkut.productservice.dto.ProductBulkRequest;
 import dev.erkut.productservice.dto.ProductCreateRequest;
 import dev.erkut.productservice.dto.ProductResponse;
 import dev.erkut.productservice.dto.ProductUpdateRequest;
@@ -22,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -152,6 +154,90 @@ class ProductControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Request validation failed"));
         verify(productService, never()).getProducts(any(Integer.class), any(Integer.class));
+    }
+
+    @Test
+    void bulkLookupValidRequestReturnsOkWithProductList() throws Exception {
+        when(productService.bulkLookup(any(ProductBulkRequest.class)))
+                .thenReturn(List.of(
+                        productResponse(ProductStatus.ACTIVE),
+                        new ProductResponse(OTHER_PRODUCT_ID, "Mouse", new BigDecimal("49.90"),
+                                ProductStatus.INACTIVE, CREATED_AT, CREATED_AT)));
+
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":[\"" + PRODUCT_ID + "\",\"" + OTHER_PRODUCT_ID + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].productId").value(PRODUCT_ID.toString()))
+                .andExpect(jsonPath("$[0].name").value("Keyboard"))
+                .andExpect(jsonPath("$[1].productId").value(OTHER_PRODUCT_ID.toString()))
+                .andExpect(jsonPath("$[1].status").value("INACTIVE"));
+
+        verify(productService).bulkLookup(new ProductBulkRequest(List.of(PRODUCT_ID, OTHER_PRODUCT_ID)));
+    }
+
+    @Test
+    void bulkLookupMissingProductReturnsNotFoundWithErrorContract() throws Exception {
+        when(productService.bulkLookup(any(ProductBulkRequest.class)))
+                .thenThrow(new ProductNotFoundException("Product(s) not found with id(s): " + OTHER_PRODUCT_ID));
+
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":[\"" + PRODUCT_ID + "\",\"" + OTHER_PRODUCT_ID + "\"]}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value(
+                        "Product(s) not found with id(s): " + OTHER_PRODUCT_ID));
+    }
+
+    @Test
+    void bulkLookupDuplicateIdsIsValidAndDelegatesRequest() throws Exception {
+        when(productService.bulkLookup(any(ProductBulkRequest.class)))
+                .thenReturn(List.of(productResponse(ProductStatus.ACTIVE)));
+
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":[\"" + PRODUCT_ID + "\",\"" + PRODUCT_ID + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].productId").value(PRODUCT_ID.toString()))
+                .andExpect(jsonPath("$.length()").value(1));
+
+        verify(productService).bulkLookup(new ProductBulkRequest(List.of(PRODUCT_ID, PRODUCT_ID)));
+    }
+
+    @Test
+    void bulkLookupRejectsEmptyNullAndNullItemRequests() throws Exception {
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Request validation failed"));
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":null}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Request validation failed"));
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":[null]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Request validation failed"));
+
+        verify(productService, never()).bulkLookup(any(ProductBulkRequest.class));
+    }
+
+    @Test
+    void bulkLookupRejectsRequestOverConfiguredBatchSize() throws Exception {
+        String ids = IntStream.range(0, 101)
+                .mapToObj(index -> "\"" + UUID.nameUUIDFromBytes(("product-" + index).getBytes()) + "\"")
+                .collect(java.util.stream.Collectors.joining(","));
+
+        mockMvc.perform(post("/products/bulk-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestedProductIds\":[" + ids + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Request validation failed"));
+
+        verify(productService, never()).bulkLookup(any(ProductBulkRequest.class));
     }
 
     @Test
