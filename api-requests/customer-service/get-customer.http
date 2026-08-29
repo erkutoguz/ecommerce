@@ -1,9 +1,0 @@
-### Get customer with customer id
-GET http://localhost:4001/customers/10000000-0000-0000-0000-000000000011
-
-###
-
-### Get customer with pagination
-GET http://localhost:4001/customers?page=0&size=5
-
-###

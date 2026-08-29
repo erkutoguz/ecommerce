@@ -1,0 +1,44 @@
+### Update only product name
+PATCH {{productBaseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "name": "Mechanical Keyboard Pro"
+}
+
+
+### Update only product price
+PATCH {{productBaseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "price": 2799.90
+}
+
+
+### Update product name and price
+PATCH {{productBaseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "name": "Mechanical Keyboard V2",
+  "price": 2999.90
+}
+
+
+### Invalid price - expect 400
+PATCH {{productBaseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "price": -100
+}
+
+
+### Update inactive product - expect 409
+PATCH {{productBaseUrl}}/products/{{inactiveProductId}}
+Content-Type: application/json
+
+{
+  "price": 999.90
+}

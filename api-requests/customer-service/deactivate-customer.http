@@ -1,4 +1,0 @@
-### Deactivate customer
-POST http://localhost:4001/customers/10000000-0000-0000-0000-000000000007/deactivate
-
-###

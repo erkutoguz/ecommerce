@@ -1,0 +1,74 @@
+package dev.erkut.productservice;
+
+import dev.erkut.productservice.dto.ProductCreateRequest;
+import dev.erkut.productservice.dto.ProductUpdateRequest;
+import dev.erkut.productservice.model.ProductStatus;
+import dev.erkut.productservice.repository.ProductRepository;
+import dev.erkut.productservice.service.ProductService;
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+@SpringBootTest
+@Transactional
+class ProductPersistenceIntegrationTests {
+
+    @Autowired
+    private ProductService productService;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private EntityManager entityManager;
+
+    @Test
+    void productPersistsWithGeneratedUuidAndCanBeReadBack() {
+        var created = productService.createProduct(
+                new ProductCreateRequest("Persistence Product", new BigDecimal("25.50")));
+        productRepository.flush();
+        entityManager.clear();
+
+        assertNotNull(created.productId());
+        var reloaded = productRepository.findById(created.productId()).orElseThrow();
+        assertEquals(created.productId(), reloaded.getId());
+        assertEquals("Persistence Product", reloaded.getName());
+        assertEquals(new BigDecimal("25.50"), reloaded.getPrice());
+        assertEquals(ProductStatus.ACTIVE, reloaded.getStatus());
+    }
+
+    @Test
+    void managedEntityNameAndPriceUpdatesPersistThroughDirtyChecking() {
+        var created = productService.createProduct(
+                new ProductCreateRequest("Original Product", new BigDecimal("25.50")));
+        productService.updateProduct(created.productId(),
+                new ProductUpdateRequest("Updated Product", new BigDecimal("30.00")));
+        productRepository.flush();
+        entityManager.clear();
+
+        var reloaded = productRepository.findById(created.productId()).orElseThrow();
+        assertEquals("Updated Product", reloaded.getName());
+        assertEquals(new BigDecimal("30.00"), reloaded.getPrice());
+        assertEquals(created.createdAt(), reloaded.getCreatedAt());
+    }
+
+    @Test
+    void managedEntityDeactivationPersistsThroughDirtyChecking() {
+        var created = productService.createProduct(
+                new ProductCreateRequest("Active Product", new BigDecimal("25.50")));
+        var deactivated = productService.deactivateProduct(created.productId());
+        productRepository.flush();
+        entityManager.clear();
+
+        var reloaded = productRepository.findById(created.productId()).orElseThrow();
+        assertEquals(ProductStatus.INACTIVE, reloaded.getStatus());
+        assertEquals(deactivated.updatedAt(), reloaded.getUpdatedAt());
+    }
+}

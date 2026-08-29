@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class OrderPersistenceTest {
 
-    private static final UUID ORDER_ID = UUID.fromString("00000005-1111-4111-8111-000000000005");
-    private static final UUID REMOVED_ITEM_ID = UUID.fromString("00000005-9999-4999-8999-000000000005");
+    private static final UUID ORDER_ID = UUID.fromString("e0000000-0000-0000-0000-000000000013");
+    private static final UUID REMOVED_ITEM_ID = UUID.fromString("d0000000-0000-0000-0000-000000000022");
     private static final Instant UPDATED_AT = Instant.parse("2026-01-01T10:05:00Z");
 
     @Autowired
@@ -48,8 +48,8 @@ class OrderPersistenceTest {
         // Act
         transactionTemplate.executeWithoutResult(status -> {
             Order order = orderRepository.findById(ORDER_ID).orElseThrow();
-            assertEquals(5, order.getItems().size());
-            assertEquals(new BigDecimal("19375.00"), order.getTotalAmount());
+            assertEquals(3, order.getItems().size());
+            assertEquals(new BigDecimal("3098.40"), order.getTotalAmount());
 
             order.removeItem(REMOVED_ITEM_ID, UPDATED_AT);
             entityManager.flush();
@@ -69,6 +69,6 @@ class OrderPersistenceTest {
         );
 
         assertEquals(0, removedItemCount);
-        assertEquals(new BigDecimal("19150.00"), persistedTotal);
+        assertEquals(new BigDecimal("2798.50"), persistedTotal);
     }
 }

@@ -1,0 +1,10 @@
+### Confirm order
+POST {{orderBaseUrl}}/orders/{{orderId}}/confirm
+
+
+### Reject order
+POST {{orderBaseUrl}}/orders/{{orderId}}/reject
+
+
+### Cancel order
+POST {{orderBaseUrl}}/orders/{{orderId}}/cancel

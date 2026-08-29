@@ -1,0 +1,28 @@
+### Create product
+POST {{productBaseUrl}}/products
+Content-Type: application/json
+
+{
+  "name": "Gaming Mouse Pad",
+  "price": 749.90
+}
+
+
+### Invalid product name - expect 400
+POST {{productBaseUrl}}/products
+Content-Type: application/json
+
+{
+  "name": "",
+  "price": 749.90
+}
+
+
+### Invalid price - expect 400
+POST {{productBaseUrl}}/products
+Content-Type: application/json
+
+{
+  "name": "Invalid Product",
+  "price": 0
+}
