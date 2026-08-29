@@ -4,8 +4,8 @@ CREATE TABLE orders (
     status          VARCHAR(30) NOT NULL,
     currency        VARCHAR(3) NOT NULL,
     total_amount    DECIMAL(19,2) NOT NULL,
-    created_at      TIMESTAMP NOT NULL,
-    updated_at      TIMESTAMP NOT NULL,
+    created_at      TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at      TIMESTAMP WITH TIME ZONE NOT NULL,
 
     CONSTRAINT chk_order_status
                     CHECK(status IN ('PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED')),

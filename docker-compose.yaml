@@ -1,0 +1,120 @@
+services:
+  api-gateway:
+    build:
+      context: ./api-gateway
+    ports:
+      - 4002:4002
+    environment:
+      ORDER_SERVICE_URL: http://order-service:4000
+      CUSTOMER_SERVICE_URL: http://customer-service:4001
+      PRODUCT_SERVICE_URL: http://product-service:4003
+    depends_on:
+      - customer-service
+      - order-service
+      - product-service
+    networks:
+      - app-network
+
+  customer-service:
+    build:
+      context: ./customer-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://customer-db:5432/customer
+      SPRING_DATASOURCE_USERNAME: customer
+      SPRING_DATASOURCE_PASSWORD: customer-pass
+    depends_on:
+      customer-db:
+        condition: service_healthy
+    networks:
+      - app-network
+      - customer-db-network
+
+  customer-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: customer
+      POSTGRES_USER: customer
+      POSTGRES_PASSWORD: customer-pass
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U customer -d customer" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - customer-db-network
+
+  order-service:
+    build:
+      context: ./order-service
+    environment:
+      CUSTOMER_SERVICE_URL: http://customer-service:4001/customers
+      PRODUCT_SERVICE_URL: http://product-service:4003/products
+      SPRING_DATASOURCE_URL: jdbc:postgresql://order-db:5432/order
+      SPRING_DATASOURCE_USERNAME: order
+      SPRING_DATASOURCE_PASSWORD: order-pass
+    depends_on:
+      order-db:
+        condition: service_healthy
+      customer-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+
+    networks:
+      - app-network
+      - order-db-network
+
+  order-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: order
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: order-pass
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U order -d order" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - order-db-network
+
+  product-service:
+    build:
+      context: ./product-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://product-db:5432/product
+      SPRING_DATASOURCE_USERNAME: product
+      SPRING_DATASOURCE_PASSWORD: product-pass
+    depends_on:
+      product-db:
+        condition: service_healthy
+    networks:
+      - app-network
+      - product-db-network
+
+  product-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: product
+      POSTGRES_USER: product
+      POSTGRES_PASSWORD: product-pass
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U product -d product" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - product-db-network
+
+
+networks:
+  app-network:
+
+  customer-db-network:
+    internal: true
+
+  order-db-network:
+    internal: true
+
+  product-db-network:
+    internal: true

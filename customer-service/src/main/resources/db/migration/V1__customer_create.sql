@@ -4,8 +4,8 @@ CREATE TABLE customers (
     email       VARCHAR(255) NOT NULL,
     phone       VARCHAR(20),
     status      VARCHAR(20) NOT NULL,
-    updated_at  TIMESTAMP NOT NULL,
-    created_at  TIMESTAMP NOT NULL,
+    updated_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
 
     CONSTRAINT uk_customer_email UNIQUE (email),
 
