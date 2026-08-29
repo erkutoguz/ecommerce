@@ -5,11 +5,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import jakarta.persistence.EntityManager;
 
@@ -19,9 +23,15 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@DataJpaTest(properties = "spring.datasource.url=jdbc:h2:mem:order-persistence;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
+@DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Testcontainers
 class OrderPersistenceTest {
+
+    @Container
+    @ServiceConnection
+    static final PostgreSQLContainer<?> postgres =
+            new PostgreSQLContainer<>("postgres:16-alpine");
 
     private static final UUID ORDER_ID = UUID.fromString("e0000000-0000-0000-0000-000000000013");
     private static final UUID REMOVED_ITEM_ID = UUID.fromString("d0000000-0000-0000-0000-000000000022");
