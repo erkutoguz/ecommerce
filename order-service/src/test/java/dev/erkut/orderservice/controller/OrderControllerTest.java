@@ -7,7 +7,9 @@ import dev.erkut.orderservice.exception.CustomerServiceUnavailableException;
 import dev.erkut.orderservice.exception.GlobalExceptionHandler;
 import dev.erkut.orderservice.exception.InvalidCustomerStateException;
 import dev.erkut.orderservice.exception.InvalidOrderStateException;
+import dev.erkut.orderservice.exception.InvalidProductStateException;
 import dev.erkut.orderservice.exception.ProductNotFoundException;
+import dev.erkut.orderservice.exception.ProductServiceUnavailableException;
 import dev.erkut.orderservice.model.Currency;
 import dev.erkut.orderservice.model.OrderStatus;
 import dev.erkut.orderservice.service.OrderService;
@@ -181,6 +183,30 @@ class OrderControllerTest {
                         .contentType("application/json")
                         .content(requestBody))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createOrder_inactiveProduct_shouldReturnConflictWithErrorContract() throws Exception {
+        when(orderService.createOrder(any()))
+                .thenThrow(new InvalidProductStateException("Product is not active"));
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreateOrderRequest()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Product is not active"));
+    }
+
+    @Test
+    void createOrder_productServiceUnavailable_shouldReturn503WithErrorContract() throws Exception {
+        when(orderService.createOrder(any()))
+                .thenThrow(new ProductServiceUnavailableException("Product service unavailable"));
+
+        mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCreateOrderRequest()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value("Product service unavailable"));
     }
 
     @Test
