@@ -1,5 +1,6 @@
 package dev.erkut.productservice.service;
 
+import dev.erkut.productservice.dto.ProductBulkRequest;
 import dev.erkut.productservice.dto.ProductCreateRequest;
 import dev.erkut.productservice.dto.ProductResponse;
 import dev.erkut.productservice.dto.ProductUpdateRequest;
@@ -15,7 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductService {
@@ -45,6 +50,28 @@ public class ProductService {
                 .and(Sort.by(Sort.Direction.DESC, "id")));
         Page<Product> products = productRepository.findAll(pageable);
         return products.map(ProductMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductResponse> bulkLookup(ProductBulkRequest req) {
+        Set<UUID> requestedIds = new HashSet<>(req.requestedProductIds());
+
+        List<Product> products = productRepository.findAllById(requestedIds);
+
+        Set<UUID> foundIds = products.stream()
+                .map(Product::getId)
+                .collect(Collectors.toSet());
+
+        Set<UUID> missingIds = new HashSet<>(requestedIds);
+        missingIds.removeAll(foundIds);
+
+        if (!missingIds.isEmpty()) {
+            throw new ProductNotFoundException("Product(s) not found with id(s): " + missingIds);
+        }
+
+        return products.stream()
+                .map(ProductMapper::toResponse)
+                .toList();
     }
 
     @Transactional

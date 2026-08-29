@@ -16,3 +16,43 @@ GET {{productBaseUrl}}/products?page=1&size=10
 
 ### Product not found - expect 404
 GET {{productBaseUrl}}/products/99999999-9999-9999-9999-999999999999
+
+
+### Product Bulk Lookup - with duplicate
+POST {{productBaseUrl}}/products/bulk-lookup
+Content-Type: application/json
+
+{
+  "requestedProductIds": [
+    "d0000000-0000-0000-0000-000000000013",
+    "d0000000-0000-0000-0000-000000000014",
+    "d0000000-0000-0000-0000-000000000015",
+    "d0000000-0000-0000-0000-000000000015"
+  ]
+}
+
+
+### Product Bulk Lookup - expect 404
+POST {{productBaseUrl}}/products/bulk-lookup
+Content-Type: application/json
+
+{
+  "requestedProductIds": [
+    "d0000000-0000-0000-0000-000000000013",
+    "99999999-9999-9999-9999-999999999999",
+    "d0000000-0000-0000-0000-000000000015",
+    "99999999-9999-9999-9999-888888888888"
+  ]
+}
+
+
+### Product Bulk Lookup -
+POST {{productBaseUrl}}/products/bulk-lookup
+Content-Type: application/json
+
+{
+  "requestedProductIds": [
+    "d0000000-0000-0000-0000-000000000013",
+    null
+  ]
+}

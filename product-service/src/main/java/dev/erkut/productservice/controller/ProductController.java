@@ -1,5 +1,6 @@
 package dev.erkut.productservice.controller;
 
+import dev.erkut.productservice.dto.ProductBulkRequest;
 import dev.erkut.productservice.dto.ProductCreateRequest;
 import dev.erkut.productservice.dto.ProductResponse;
 import dev.erkut.productservice.dto.ProductUpdateRequest;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -42,6 +44,12 @@ public class ProductController {
             @RequestParam(value = "size", defaultValue = "10") @Min(1) @Max(100) int size
     ) {
         Page<ProductResponse> response = productService.getProducts(page, size);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @PostMapping("/bulk-lookup")
+    public ResponseEntity<List<ProductResponse>> bulkLookup(@Valid @RequestBody ProductBulkRequest req) {
+        List<ProductResponse> response = productService.bulkLookup(req);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
