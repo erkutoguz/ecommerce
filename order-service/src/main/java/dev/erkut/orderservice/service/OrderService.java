@@ -33,13 +33,14 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final CustomerClient customerClient;
     private final ProductClient productClient;
-    public OrderService(OrderRepository orderRepository, CustomerClient customerClient, ProductClient productClient) {
+    private final OrderTransactionalService orderTransactionalService;
+    public OrderService(OrderRepository orderRepository, CustomerClient customerClient, ProductClient productClient, OrderTransactionalService orderTransactionalService) {
         this.orderRepository = orderRepository;
         this.customerClient = customerClient;
         this.productClient = productClient;
+        this.orderTransactionalService = orderTransactionalService;
     }
 
-    @Transactional
     public OrderResponse createOrder(OrderCreateRequest req) {
         CustomerClientResponse customer = customerClient.getCustomerDetail(req.customerId());
 
@@ -73,9 +74,8 @@ public class OrderService {
                     now
             );
         });
-
-
-        Order savedOrder = orderRepository.save(order);
+        
+        Order savedOrder = orderTransactionalService.saveOrder(order);
 
         return OrderMapper.toResponse(savedOrder);
     }
