@@ -1,25 +1,16 @@
 package dev.erkut.orderservice.order.application;
 
-import dev.erkut.orderservice.integration.customer.CustomerClient;
-import dev.erkut.orderservice.integration.customer.CustomerLookupResponse;
-import dev.erkut.orderservice.integration.customer.CustomerStatus;
-import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
-import dev.erkut.orderservice.integration.product.InvalidProductStateException;
-import dev.erkut.orderservice.integration.product.ProductClient;
-import dev.erkut.orderservice.integration.product.ProductLookupRequest;
-import dev.erkut.orderservice.integration.product.ProductLookupResponse;
-import dev.erkut.orderservice.integration.product.ProductNotFoundException;
-import dev.erkut.orderservice.integration.product.ProductStatus;
 import dev.erkut.orderservice.order.api.OrderMapper;
-import dev.erkut.orderservice.order.api.request.OrderCreateRequest;
-import dev.erkut.orderservice.order.api.request.OrderItemRequest;
-import dev.erkut.orderservice.order.api.request.OrderItemUpdateRequest;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
+import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.Order;
+import dev.erkut.orderservice.order.domain.OrderLineSnapshot;
+import dev.erkut.orderservice.order.domain.OrderRejectionReason;
 import dev.erkut.orderservice.order.domain.exception.OrderNotFoundException;
 import dev.erkut.orderservice.order.persistence.OrderRepository;
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,52 +21,56 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
-    private final CustomerClient customerClient;
-    private final ProductClient productClient;
-    private final OrderTransactionalService orderTransactionalService;
-    public OrderService(OrderRepository orderRepository, CustomerClient customerClient, ProductClient productClient, OrderTransactionalService orderTransactionalService) {
+
+    public OrderService(OrderRepository orderRepository) {
         this.orderRepository = orderRepository;
-        this.customerClient = customerClient;
-        this.productClient = productClient;
-        this.orderTransactionalService = orderTransactionalService;
     }
 
-    public OrderResponse createOrder(OrderCreateRequest req) {
-        CustomerLookupResponse customer = customerClient.getCustomerDetail(req.customerId());
+    @Transactional
+    public Order createFromCheckout(
+            UUID sourceCartId,
+            UUID customerId,
+            Currency currency,
+            List<OrderLineSnapshot> itemSnapshots,
+            Instant now
+    ) {
+        Order order = Order.create(sourceCartId, customerId, currency, itemSnapshots, now);
+        return orderRepository.save(order);
+    }
 
-        if(customer.status() != CustomerStatus.ACTIVE) {
-            throw new InvalidCustomerStateException("Customer is not active: " + customer.customerId());
-        }
+    @Transactional
+    public Order markStockReserved(UUID orderId, Instant now) {
+        Order order = findOrderById(orderId);
+        order.markStockReserved(now);
+        return order;
+    }
 
-        Map<UUID, Integer> productQtyMap = new HashMap<>();
-        req.items().forEach(item -> {
-            productQtyMap.put(item.itemId(), productQtyMap.getOrDefault(item.itemId(), 0) + item.quantity());
-        });
+    @Transactional
+    public Order markPaymentUnknown(UUID orderId, Instant now) {
+        Order order = findOrderById(orderId);
+        order.markPaymentUnknown(now);
+        return order;
+    }
 
-        ProductLookupRequest lookupRequest = new ProductLookupRequest(new ArrayList<>(productQtyMap.keySet()));
-        List<ProductLookupResponse> products = productClient.getProductsByIds(lookupRequest);
+    @Transactional
+    public Order markPaymentCompleted(UUID orderId, Instant now) {
+        Order order = findOrderById(orderId);
+        order.markPaymentCompleted(now);
+        return order;
+    }
 
-        products.stream()
-                .filter(product -> product.status() != ProductStatus.ACTIVE)
-                .findFirst()
-                .ifPresent(product -> {
-                    throw new InvalidProductStateException("Product is not active: " + product.productId());
-                });
+    @Transactional
+    public Order confirm(UUID orderId, Instant now) {
+        Order order = findOrderById(orderId);
+        order.confirm(now);
+        return order;
+    }
 
-        Instant now = Instant.now();
-        Order order = Order.create(customer.customerId(), req.currency(), now);
-
-        products.forEach(p -> {
-            order.addItem(p.productId(),
-                    p.name(),
-                    p.price(),
-                    productQtyMap.get(p.productId()),
-                    now
-            );
-        });
-        Order savedOrder = orderTransactionalService.saveOrder(order);
-
-        return OrderMapper.toResponse(savedOrder);
+    @Transactional
+    public Order reject(UUID orderId, OrderRejectionReason reason, Instant now) {
+        Order order = findOrderById(orderId);
+        order.reject(reason, now);
+        return order;
     }
 
     @Transactional(readOnly = true)
@@ -97,69 +92,8 @@ public class OrderService {
         return OrderMapper.toResponse(order);
     }
 
-    @Transactional
-    public OrderResponse confirmOrder(UUID orderId) {
-        Order order = findOrderById(orderId);
-        order.confirm(Instant.now());
-        return OrderMapper.toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse rejectOrder(UUID orderId) {
-        Order order = findOrderById(orderId);
-        order.reject(Instant.now());
-        return OrderMapper.toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse cancelOrder(UUID orderId) {
-        Order order = findOrderById(orderId);
-        order.cancel(Instant.now());
-        return OrderMapper.toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse addOrderItem(UUID orderId, OrderItemRequest req) {
-        Order order = findOrderById(orderId);
-        List<ProductLookupResponse> products = productClient.getProductsByIds(
-                new ProductLookupRequest(List.of(req.itemId())));
-
-        if (products == null || products.isEmpty()) {
-            throw new ProductNotFoundException("Product not found: " + req.itemId());
-        }
-
-        ProductLookupResponse product = products.getFirst();
-        order.addItem(
-                req.itemId(),
-                product.name(),
-                product.price(),
-                req.quantity(),
-                Instant.now()
-        );
-        return OrderMapper.toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse updateOrderItem(UUID orderId, UUID itemId, OrderItemUpdateRequest req) {
-        Order order = findOrderById(orderId);
-        order.changeItemQuantity(
-                itemId,
-                req.quantity(),
-                Instant.now()
-        );
-        return OrderMapper.toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse removeOrderItem(UUID orderId, UUID itemId) {
-        Order order = findOrderById(orderId);
-        order.removeItem(itemId, Instant.now());
-        return OrderMapper.toResponse(order);
-    }
-
     private Order findOrderById(UUID orderId) {
-       return orderRepository.findById(orderId)
+        return orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
     }
-
 }

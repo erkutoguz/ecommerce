@@ -7,7 +7,6 @@ import dev.erkut.orderservice.integration.product.InvalidProductStateException;
 import dev.erkut.orderservice.integration.product.ProductNotFoundException;
 import dev.erkut.orderservice.integration.product.ProductServiceUnavailableException;
 import dev.erkut.orderservice.order.domain.exception.InvalidOrderStateException;
-import dev.erkut.orderservice.order.domain.exception.OrderItemNotFoundException;
 import dev.erkut.orderservice.order.domain.exception.OrderNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,14 +41,6 @@ public class GlobalExceptionHandler {
 
         errors.put("error", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errors);
-    }
-
-    @ExceptionHandler(OrderItemNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleItemNotFoundException(OrderItemNotFoundException ex) {
-        Map<String, String> errors = new HashMap<>();
-
-        errors.put("error", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errors);
     }
 
     @ExceptionHandler(CustomerNotFoundException.class)

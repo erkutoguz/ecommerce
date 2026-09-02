@@ -1,12 +1,14 @@
 package dev.erkut.orderservice.order.domain;
 
 import dev.erkut.orderservice.order.domain.exception.InvalidOrderStateException;
-import dev.erkut.orderservice.order.domain.exception.OrderItemNotFoundException;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -17,6 +19,9 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "source_cart_id", nullable = false)
+    private UUID sourceCartId;
+
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
 
@@ -25,11 +30,15 @@ public class Order {
             cascade = CascadeType.ALL,
             orphanRemoval = true
     )
-    private List<OrderItem> items = new ArrayList<>();
+    private List<OrderItem> orderItems = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 30)
+    @Column(name = "status", nullable = false, length = 40)
     private OrderStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rejection_reason", length = 40)
+    private OrderRejectionReason rejectionReason;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "currency", nullable = false, length = 3)
@@ -49,9 +58,25 @@ public class Order {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+
+    @Column(name = "rejected_at")
+    private Instant rejectedAt;
+
     protected Order() {}
 
-    private Order(UUID customerId, Currency currency, Instant now) {
+    private Order(
+            UUID sourceCartId,
+            UUID customerId,
+            Currency currency,
+            List<OrderLineSnapshot> itemSnapshots,
+            Instant now
+    ) {
+        if (sourceCartId == null) {
+            throw new IllegalArgumentException("Source cart id cannot be null");
+        }
+
         if (customerId == null) {
             throw new IllegalArgumentException("Customer id cannot be null");
         }
@@ -64,176 +89,168 @@ public class Order {
             throw new IllegalArgumentException("Creation time cannot be null");
         }
 
+        if (itemSnapshots == null || itemSnapshots.isEmpty()) {
+            throw new IllegalArgumentException("Order must contain at least one item");
+        }
+
+        this.sourceCartId = sourceCartId;
         this.customerId = customerId;
         this.currency = currency;
-        this.status = OrderStatus.PENDING;
-        this.totalAmount = BigDecimal.ZERO;
+        this.status = OrderStatus.PENDING_STOCK;
+        this.rejectionReason = null;
         this.createdAt = now;
+        this.updatedAt = now;
+        this.confirmedAt = null;
+        this.rejectedAt = null;
+
+        addSnapshots(itemSnapshots);
+        this.totalAmount = calculateTotalAmount();
+    }
+
+    public static Order create(
+            UUID sourceCartId,
+            UUID customerId,
+            Currency currency,
+            List<OrderLineSnapshot> itemSnapshots,
+            Instant now
+    ) {
+        return new Order(sourceCartId, customerId, currency, itemSnapshots, now);
+    }
+
+    public void markStockReserved(Instant now) {
+        ensureNow(now);
+        if (status != OrderStatus.PENDING_STOCK) {
+            throw new InvalidOrderStateException("Cannot mark stock reserved from status " + status);
+        }
+
+        this.status = OrderStatus.PENDING_PAYMENT;
         this.updatedAt = now;
     }
 
-    public static Order create(UUID customerId, Currency currency, Instant now) {
-        return new Order(customerId, currency, now);
+    public void markPaymentUnknown(Instant now) {
+        ensureNow(now);
+        if (status != OrderStatus.PENDING_PAYMENT) {
+            throw new InvalidOrderStateException("Cannot mark payment unknown from status " + status);
+        }
+
+        this.status = OrderStatus.PAYMENT_UNKNOWN;
+        this.updatedAt = now;
     }
 
-    public void addItem(UUID itemId, String itemNameSnapshot, BigDecimal itemPriceSnapshot, int quantity, Instant now) {
-        ensureOrderEditable();
-        validateUpdateTime(now);
-
-        if (itemId == null) {
-            throw new IllegalArgumentException("Item id cannot be null");
+    public void markPaymentCompleted(Instant now) {
+        ensureNow(now);
+        if (status != OrderStatus.PENDING_PAYMENT && status != OrderStatus.PAYMENT_UNKNOWN) {
+            throw new InvalidOrderStateException("Cannot mark payment completed from status " + status);
         }
 
-        OrderItem existingItem = items.stream()
-                .filter(item -> item.hasItemId(itemId))
-                .findFirst()
-                .orElse(null);
-
-        if (existingItem != null) {
-            existingItem.increaseQuantity(quantity);
-            calculateTotalAmount();
-            updateTime(now);
-            return;
-        }
-
-        OrderItem newItem = OrderItem.create(
-                this,
-                itemId,
-                itemNameSnapshot,
-                itemPriceSnapshot,
-                quantity);
-
-        items.add(newItem);
-
-        calculateTotalAmount();
-        updateTime(now);
-    }
-
-    public void removeItem(UUID itemId, Instant now) {
-        ensureOrderEditable();
-        validateUpdateTime(now);
-
-        OrderItem item = findItem(itemId);
-
-        if (items.size() == 1) {
-            throw new IllegalStateException("Order must contain at least one item");
-        }
-
-        items.remove(item);
-
-        calculateTotalAmount();
-        updateTime(now);
+        this.status = OrderStatus.PENDING_STOCK_CONFIRMATION;
+        this.updatedAt = now;
     }
 
     public void confirm(Instant now) {
-        validateUpdateTime(now);
-
-        if (status != OrderStatus.PENDING) {
-            throw new InvalidOrderStateException("Only pending orders can be confirmed");
+        ensureNow(now);
+        if (status != OrderStatus.PENDING_STOCK_CONFIRMATION) {
+            throw new InvalidOrderStateException("Cannot confirm order from status " + status);
         }
 
-        ensureHasItems();
-
-        status = OrderStatus.CONFIRMED;
-        updateTime(now);
-    }
-
-    public void reject(Instant now) {
-        validateUpdateTime(now);
-
-        if (status != OrderStatus.PENDING) {
-            throw new InvalidOrderStateException("Only pending orders can be rejected");
-        }
-
-        status = OrderStatus.REJECTED;
-        updateTime(now);
-    }
-
-    public void cancel(Instant now) {
-        validateUpdateTime(now);
-
-        if (status == OrderStatus.CANCELLED) {
-            return;
-        }
-
-        if (status == OrderStatus.REJECTED) {
-            throw new InvalidOrderStateException("Rejected order cannot be cancelled");
-        }
-
-        status = OrderStatus.CANCELLED;
-        updateTime(now);
-    }
-
-    public void changeItemQuantity(UUID itemId, int quantity, Instant now) {
-        ensureOrderEditable();
-        validateUpdateTime(now);
-
-        OrderItem item = findItem(itemId);
-
-        item.changeQuantity(quantity);
-
-        calculateTotalAmount();
-        updateTime(now);
-    }
-
-    private OrderItem findItem(UUID itemId) {
-        if (itemId == null) {
-            throw new IllegalArgumentException("Item id cannot be null");
-        }
-
-        return items.stream()
-                .filter(item -> item.hasItemId(itemId))
-                .findFirst()
-                .orElseThrow(
-                        () -> new OrderItemNotFoundException("Item does not exist in order: " + itemId)
-                );
-    }
-
-    private void calculateTotalAmount() {
-        this.totalAmount = items.stream()
-                .map(OrderItem::calculateTotalAmount)
-                .reduce(
-                        BigDecimal.ZERO,
-                        BigDecimal::add
-                );
-    }
-
-    private void ensureOrderEditable() {
-        if (status != OrderStatus.PENDING) {
-            throw new InvalidOrderStateException("Order cannot be modified with status " + status);
-        }
-    }
-
-    private void ensureHasItems() {
-        if (items.isEmpty()) {
-            throw new IllegalStateException("Order must contain at least one item");
-        }
-    }
-
-    private void validateUpdateTime(Instant now) {
-        if (now == null) {
-            throw new IllegalArgumentException("Update time cannot be null");
-        }
-    }
-
-    private void updateTime(Instant now) {
+        this.status = OrderStatus.CONFIRMED;
+        this.confirmedAt = now;
         this.updatedAt = now;
+    }
+
+    public void reject(OrderRejectionReason reason, Instant now) {
+        ensureNow(now);
+
+        if (reason == null) {
+            throw new IllegalArgumentException("Rejection reason cannot be null");
+        }
+
+        ensureRejectionAllowed(reason);
+
+        this.status = OrderStatus.REJECTED;
+        this.rejectionReason = reason;
+        this.rejectedAt = now;
+        this.updatedAt = now;
+    }
+
+    private void addSnapshots(List<OrderLineSnapshot> itemSnapshots) {
+        Set<UUID> seenProductIds = new HashSet<>();
+        for (OrderLineSnapshot snapshot : itemSnapshots) {
+            if (snapshot == null) {
+                throw new IllegalArgumentException("Order line snapshot cannot be null");
+            }
+
+            if (!seenProductIds.add(snapshot.productId())) {
+                throw new IllegalArgumentException("Duplicate product in order: " + snapshot.productId());
+            }
+
+            this.orderItems.add(OrderItem.create(
+                    this,
+                    snapshot.productId(),
+                    snapshot.productNameSnapshot(),
+                    snapshot.productPriceSnapshot(),
+                    snapshot.quantity()
+            ));
+        }
+    }
+
+    private void ensureRejectionAllowed(OrderRejectionReason reason) {
+        boolean allowed = switch (status) {
+            case PENDING_STOCK ->
+                    reason == OrderRejectionReason.OUT_OF_STOCK
+                            || reason == OrderRejectionReason.USER_CANCELLED;
+
+            case PENDING_PAYMENT ->
+                    reason == OrderRejectionReason.PAYMENT_DECLINED
+                            || reason == OrderRejectionReason.USER_CANCELLED
+                            || reason == OrderRejectionReason.RESERVATION_EXPIRED;
+
+            case PAYMENT_UNKNOWN ->
+                    reason == OrderRejectionReason.PAYMENT_DECLINED;
+
+            default -> false;
+        };
+
+        if (!allowed) {
+            throw new InvalidOrderStateException("Cannot reject order with reason " + reason + " from status " + status);
+        }
+    }
+
+    private BigDecimal calculateTotalAmount() {
+        return orderItems.stream()
+                .map(OrderItem::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    private void ensureNow(Instant now) {
+        if (now == null) {
+            throw new IllegalArgumentException("Time cannot be null");
+        }
     }
 
     public UUID getId() {
         return id;
     }
 
+    public UUID getSourceCartId() {
+        return sourceCartId;
+    }
+
     public UUID getCustomerId() {
         return customerId;
     }
 
-    public List<OrderItem> getItems() {
-        return List.copyOf(items);
+    public List<OrderItem> getOrderItems() {
+        return List.copyOf(orderItems);
     }
 
     public OrderStatus getStatus() {
         return status;
+    }
+
+    public OrderRejectionReason getRejectionReason() {
+        return rejectionReason;
     }
 
     public Currency getCurrency() {
@@ -250,5 +267,13 @@ public class Order {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Instant getConfirmedAt() {
+        return confirmedAt;
+    }
+
+    public Instant getRejectedAt() {
+        return rejectedAt;
     }
 }

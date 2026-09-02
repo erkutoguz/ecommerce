@@ -6,7 +6,13 @@ import java.math.RoundingMode;
 import java.util.UUID;
 
 @Entity
-@Table(name = "order_items")
+@Table(
+        name = "order_items",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_order_items_order_product",
+                columnNames = {"order_id", "product_id"}
+        )
+)
 public class OrderItem {
 
     @Id
@@ -17,46 +23,46 @@ public class OrderItem {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    @Column(name = "item_id", nullable = false)
-    private UUID itemId;
+    @Column(name = "product_id", nullable = false)
+    private UUID productId;
 
-    @Column(name = "item_name_snapshot", nullable = false, length = 255)
-    private String itemNameSnapshot;
+    @Column(name = "product_name_snapshot", nullable = false, length = 255)
+    private String productNameSnapshot;
 
     @Column(
-            name = "item_price_snapshot",
+            name = "product_price_snapshot",
             nullable = false,
             precision = 19,
             scale = 2
     )
-    private BigDecimal itemPriceSnapshot;
+    private BigDecimal productPriceSnapshot;
 
     @Column(name = "quantity", nullable = false)
-    private Integer quantity;
+    private int quantity;
 
     protected OrderItem() {}
 
     private OrderItem(
             Order order,
-            UUID itemId,
-            String itemNameSnapshot,
-            BigDecimal itemPriceSnapshot,
+            UUID productId,
+            String productNameSnapshot,
+            BigDecimal productPriceSnapshot,
             int quantity
     ) {
         if (order == null) {
             throw new IllegalArgumentException("Order cannot be null");
         }
 
-        if (itemId == null) {
-            throw new IllegalArgumentException("Item id cannot be null");
+        if (productId == null) {
+            throw new IllegalArgumentException("Product id cannot be null");
         }
 
-        if (itemNameSnapshot == null || itemNameSnapshot.isBlank()) {
-            throw new IllegalArgumentException("Item name cannot be blank");
+        if (productNameSnapshot == null || productNameSnapshot.isBlank()) {
+            throw new IllegalArgumentException("Product name cannot be blank");
         }
 
-        if (itemPriceSnapshot == null || itemPriceSnapshot.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Item price must be greater than zero");
+        if (productPriceSnapshot == null || productPriceSnapshot.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Product price must be greater than zero");
         }
 
         if (quantity <= 0) {
@@ -64,80 +70,61 @@ public class OrderItem {
         }
 
         this.order = order;
-        this.itemId = itemId;
-        this.itemNameSnapshot = itemNameSnapshot;
-        this.itemPriceSnapshot = validateMoney(itemPriceSnapshot);
+        this.productId = productId;
+        this.productNameSnapshot = productNameSnapshot;
+        this.productPriceSnapshot = validateMoney(productPriceSnapshot);
         this.quantity = quantity;
     }
 
     static OrderItem create(
             Order order,
-            UUID itemId,
-            String itemNameSnapshot,
-            BigDecimal itemPriceSnapshot,
+            UUID productId,
+            String productNameSnapshot,
+            BigDecimal productPriceSnapshot,
             int quantity
     ) {
         return new OrderItem(
                 order,
-                itemId,
-                itemNameSnapshot,
-                itemPriceSnapshot,
+                productId,
+                productNameSnapshot,
+                productPriceSnapshot,
                 quantity
         );
     }
 
-    void changeQuantity(int quantity) {
-        if(quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-        this.quantity = quantity;
-    }
-
-    void increaseQuantity(int amount) {
-        if (amount <= 0) {
-            throw new IllegalArgumentException("Increase amount must be greater than zero");
-        }
-
-        this.quantity += amount;
-    }
-
     private static BigDecimal validateMoney(BigDecimal value) {
         if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Item price must be greater than zero");
+            throw new IllegalArgumentException("Product price must be greater than zero");
         }
 
         try {
             return value.setScale(2, RoundingMode.UNNECESSARY);
         } catch (ArithmeticException ex) {
-            throw new IllegalArgumentException("Item price must have at most 2 decimal places");
+            throw new IllegalArgumentException("Product price must have at most 2 decimal places");
         }
     }
 
-    BigDecimal calculateTotalAmount() {
-        return itemPriceSnapshot.multiply(BigDecimal.valueOf(quantity));
-    }
-
-    boolean hasItemId(UUID itemId) {
-        return this.itemId.equals(itemId);
+    BigDecimal lineTotal() {
+        return productPriceSnapshot.multiply(BigDecimal.valueOf(quantity));
     }
 
     public UUID getId() {
         return id;
     }
 
-    public UUID getItemId() {
-        return itemId;
+    public UUID getProductId() {
+        return productId;
     }
 
-    public String getItemNameSnapshot() {
-        return itemNameSnapshot;
+    public String getProductNameSnapshot() {
+        return productNameSnapshot;
     }
 
-    public BigDecimal getItemPriceSnapshot() {
-        return itemPriceSnapshot;
+    public BigDecimal getProductPriceSnapshot() {
+        return productPriceSnapshot;
     }
 
-    public Integer getQuantity() {
+    public int getQuantity() {
         return quantity;
     }
 }

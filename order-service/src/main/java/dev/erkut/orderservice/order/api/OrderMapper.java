@@ -11,21 +11,25 @@ public class OrderMapper {
     public static OrderResponse toResponse(Order order) {
         return new OrderResponse(
                 order.getId(),
+                order.getSourceCartId(),
                 order.getCustomerId(),
-                toOrderItemResponses(order.getItems()),
+                toOrderItemResponses(order.getOrderItems()),
                 order.getStatus(),
+                order.getRejectionReason(),
                 order.getCurrency(),
                 order.getTotalAmount(),
                 order.getCreatedAt(),
-                order.getUpdatedAt()
+                order.getUpdatedAt(),
+                order.getConfirmedAt(),
+                order.getRejectedAt()
         );
     }
 
     private static OrderItemResponse toResponse(OrderItem item) {
         return new OrderItemResponse(
-                item.getItemId(),
-                item.getItemNameSnapshot(),
-                item.getItemPriceSnapshot(),
+                item.getProductId(),
+                item.getProductNameSnapshot(),
+                item.getProductPriceSnapshot(),
                 item.getQuantity()
         );
     }
