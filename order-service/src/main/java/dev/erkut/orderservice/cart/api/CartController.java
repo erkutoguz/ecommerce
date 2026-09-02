@@ -2,13 +2,10 @@ package dev.erkut.orderservice.cart.api;
 
 import dev.erkut.orderservice.cart.api.request.CartAddItemRequest;
 import dev.erkut.orderservice.cart.api.request.CartItemUpdateRequest;
-import dev.erkut.orderservice.cart.api.response.CartItemResponse;
 import dev.erkut.orderservice.cart.api.response.CartResponse;
 import dev.erkut.orderservice.cart.application.CartService;
 import dev.erkut.orderservice.cart.domain.Cart;
-import dev.erkut.orderservice.cart.domain.CartItem;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

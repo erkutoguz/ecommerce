@@ -129,6 +129,34 @@ class OrderTest {
     }
 
     @Test
+    void create_nullCustomerId_shouldThrow() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> Order.create(
+                        SOURCE_CART_ID,
+                        null,
+                        Currency.TRY,
+                        List.of(new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 1)),
+                        CREATED_AT
+                )
+        );
+    }
+
+    @Test
+    void create_nullCurrency_shouldThrow() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> Order.create(
+                        SOURCE_CART_ID,
+                        CUSTOMER_ID,
+                        null,
+                        List.of(new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 1)),
+                        CREATED_AT
+                )
+        );
+    }
+
+    @Test
     void create_nullSourceCartId_shouldThrow() {
         assertThrows(
                 IllegalArgumentException.class,
@@ -289,6 +317,65 @@ class OrderTest {
         assertNull(order.getRejectionReason());
         assertNull(order.getRejectedAt());
         assertEquals(before, order.getUpdatedAt());
+    }
+
+    @Test
+    void reject_fromPendingStock_withUserCancelled_shouldReject() {
+        Order order = validOrder(CREATED_AT);
+
+        order.reject(OrderRejectionReason.USER_CANCELLED, UPDATED_AT);
+
+        assertEquals(OrderStatus.REJECTED, order.getStatus());
+        assertEquals(OrderRejectionReason.USER_CANCELLED, order.getRejectionReason());
+        assertEquals(UPDATED_AT, order.getRejectedAt());
+        assertEquals(UPDATED_AT, order.getUpdatedAt());
+    }
+
+    @Test
+    void reject_fromPendingStock_withReservationExpired_shouldThrow() {
+        Order order = validOrder(CREATED_AT);
+
+        assertThrows(
+                InvalidOrderStateException.class,
+                () -> order.reject(OrderRejectionReason.RESERVATION_EXPIRED, UPDATED_AT)
+        );
+        assertEquals(OrderStatus.PENDING_STOCK, order.getStatus());
+        assertNull(order.getRejectionReason());
+    }
+
+    @Test
+    void reject_fromPendingPayment_withUserCancelled_shouldReject() {
+        Order order = orderIn(OrderStatus.PENDING_PAYMENT);
+
+        order.reject(OrderRejectionReason.USER_CANCELLED, UPDATED_AT);
+
+        assertEquals(OrderStatus.REJECTED, order.getStatus());
+        assertEquals(OrderRejectionReason.USER_CANCELLED, order.getRejectionReason());
+        assertEquals(UPDATED_AT, order.getRejectedAt());
+    }
+
+    @Test
+    void reject_fromPendingPayment_withReservationExpired_shouldReject() {
+        Order order = orderIn(OrderStatus.PENDING_PAYMENT);
+
+        order.reject(OrderRejectionReason.RESERVATION_EXPIRED, UPDATED_AT);
+
+        assertEquals(OrderStatus.REJECTED, order.getStatus());
+        assertEquals(OrderRejectionReason.RESERVATION_EXPIRED, order.getRejectionReason());
+        assertEquals(UPDATED_AT, order.getRejectedAt());
+    }
+
+    @Test
+    void reject_fromPaymentUnknown_withOutOfStock_shouldThrow() {
+        Order order = orderIn(OrderStatus.PAYMENT_UNKNOWN);
+
+        assertThrows(
+                InvalidOrderStateException.class,
+                () -> order.reject(OrderRejectionReason.OUT_OF_STOCK, UPDATED_AT)
+        );
+        assertEquals(OrderStatus.PAYMENT_UNKNOWN, order.getStatus());
+        assertNull(order.getRejectionReason());
+        assertNull(order.getRejectedAt());
     }
 
     @Test

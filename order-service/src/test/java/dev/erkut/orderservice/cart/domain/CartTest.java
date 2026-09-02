@@ -275,6 +275,49 @@ class CartTest {
     }
 
     @Test
+    void lockForCheckout_fromCheckoutLocked_shouldThrow() {
+        Cart cart = checkoutLockedCart();
+
+        assertThrows(IllegalStateException.class, () -> cart.lockForCheckout(UPDATED_AT));
+        assertEquals(CartStatus.CHECKOUT_LOCKED, cart.getStatus());
+    }
+
+    @Test
+    void lockForCheckout_fromCompleted_shouldThrow() {
+        Cart cart = completedCart();
+
+        assertThrows(IllegalStateException.class, () -> cart.lockForCheckout(UPDATED_AT));
+        assertEquals(CartStatus.COMPLETED, cart.getStatus());
+    }
+
+    @Test
+    void complete_fromCompleted_shouldThrow() {
+        Cart cart = completedCart();
+
+        assertThrows(IllegalStateException.class, () -> cart.complete(UPDATED_AT));
+        assertEquals(CartStatus.COMPLETED, cart.getStatus());
+    }
+
+    @Test
+    void removeCartItem_nullProductId_shouldThrow() {
+        Cart cart = activeCartWithItem();
+
+        assertThrows(IllegalArgumentException.class, () -> cart.removeCartItem(null, UPDATED_AT));
+        assertEquals(1, cart.getCartItems().size());
+    }
+
+    @Test
+    void changeCartItemQuantity_nullProductId_shouldThrow() {
+        Cart cart = activeCartWithItem();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> cart.changeCartItemQuantity(null, 1, UPDATED_AT)
+        );
+        assertEquals(1, cart.getCartItems().getFirst().getQuantity());
+    }
+
+    @Test
     void getCartItems_shouldBeUnmodifiable() {
         Cart cart = activeCartWithItem();
 

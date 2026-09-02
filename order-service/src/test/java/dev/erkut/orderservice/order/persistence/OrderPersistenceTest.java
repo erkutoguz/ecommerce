@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 @DataJpaTest
@@ -41,6 +42,10 @@ class OrderPersistenceTest {
     private static final UUID SAVE_CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
     private static final UUID REJECT_CART_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2");
     private static final UUID REJECT_CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
+    private static final UUID MULTI_CART_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3");
+    private static final UUID MULTI_CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3");
+    private static final UUID CONFIRM_CART_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4");
+    private static final UUID CONFIRM_CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4");
     private static final UUID PRODUCT_A = UUID.fromString("90000000-0000-0000-0000-000000000001");
     private static final UUID PRODUCT_B = UUID.fromString("90000000-0000-0000-0000-000000000002");
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
@@ -131,6 +136,118 @@ class OrderPersistenceTest {
 
         assertEquals("REJECTED", status);
         assertEquals("OUT_OF_STOCK", reason);
+        assertNotNull(jdbcTemplate.queryForObject(
+                "select rejected_at from orders where id = ?",
+                Object.class,
+                orderId
+        ));
+        assertNull(jdbcTemplate.queryForObject(
+                "select confirmed_at from orders where id = ?",
+                Object.class,
+                orderId
+        ));
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void confirm_shouldPersistConfirmedAtAndLeaveRejectedAtNull() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        insertCart(CONFIRM_CART_ID, CONFIRM_CUSTOMER_ID);
+
+        UUID orderId = transactionTemplate.execute(status -> {
+            Order order = Order.create(
+                    CONFIRM_CART_ID,
+                    CONFIRM_CUSTOMER_ID,
+                    Currency.USD,
+                    List.of(new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 1)),
+                    CREATED_AT
+            );
+            return orderRepository.save(order).getId();
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            Order order = orderRepository.findById(orderId).orElseThrow();
+            order.markStockReserved(UPDATED_AT);
+            order.markPaymentCompleted(UPDATED_AT.plusSeconds(1));
+            order.confirm(UPDATED_AT.plusSeconds(2));
+            entityManager.flush();
+        });
+
+        Order reloaded = transactionTemplate.execute(status ->
+                orderRepository.findWithItemsById(orderId).orElseThrow()
+        );
+
+        assertEquals(OrderStatus.CONFIRMED, reloaded.getStatus());
+        assertEquals(Currency.USD, reloaded.getCurrency());
+        assertEquals(new BigDecimal("100.00"), reloaded.getTotalAmount());
+        assertEquals(CONFIRM_CART_ID, reloaded.getSourceCartId());
+        assertNull(reloaded.getRejectionReason());
+        assertNotNull(reloaded.getConfirmedAt());
+        assertNull(reloaded.getRejectedAt());
+        assertEquals(1, reloaded.getOrderItems().size());
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void sameSourceCart_shouldAllowMultipleOrderAttempts() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        insertCart(MULTI_CART_ID, MULTI_CUSTOMER_ID);
+
+        transactionTemplate.executeWithoutResult(status -> {
+            orderRepository.save(Order.create(
+                    MULTI_CART_ID,
+                    MULTI_CUSTOMER_ID,
+                    Currency.TRY,
+                    List.of(new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 1)),
+                    CREATED_AT
+            ));
+            orderRepository.save(Order.create(
+                    MULTI_CART_ID,
+                    MULTI_CUSTOMER_ID,
+                    Currency.TRY,
+                    List.of(new OrderLineSnapshot(PRODUCT_B, "Product B", new BigDecimal("50.00"), 2)),
+                    CREATED_AT.plusSeconds(1)
+            ));
+        });
+
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from orders where source_cart_id = ?",
+                Integer.class,
+                MULTI_CART_ID
+        );
+        assertEquals(2, count);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void findWithItemsById_shouldInitializeItemsOutsideSession() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        UUID cartId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5");
+        UUID customerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5");
+        insertCart(cartId, customerId);
+
+        UUID orderId = transactionTemplate.execute(status ->
+                orderRepository.save(Order.create(
+                        cartId,
+                        customerId,
+                        Currency.EUR,
+                        List.of(
+                                new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("10.00"), 1),
+                                new OrderLineSnapshot(PRODUCT_B, "Product B", new BigDecimal("20.00"), 2)
+                        ),
+                        CREATED_AT
+                )).getId()
+        );
+
+        Order reloaded = transactionTemplate.execute(status ->
+                orderRepository.findWithItemsById(orderId).orElseThrow()
+        );
+
+        assertEquals(2, reloaded.getOrderItems().size());
+        assertEquals(Currency.EUR, reloaded.getCurrency());
+        assertEquals(new BigDecimal("50.00"), reloaded.getTotalAmount());
+        assertEquals(PRODUCT_A, reloaded.getOrderItems().getFirst().getProductId());
+        assertEquals("Product A", reloaded.getOrderItems().getFirst().getProductNameSnapshot());
     }
 
     private void insertCart(UUID cartId, UUID customerId) {

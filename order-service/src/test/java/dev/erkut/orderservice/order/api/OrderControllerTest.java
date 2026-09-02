@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.order.api;
 
-import dev.erkut.orderservice.order.api.error.GlobalExceptionHandler;
+import dev.erkut.orderservice.api.error.GlobalExceptionHandler;
+import dev.erkut.orderservice.order.api.error.OrderExceptionHandler;
 import dev.erkut.orderservice.order.api.response.OrderItemResponse;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
 import dev.erkut.orderservice.order.application.OrderService;
@@ -28,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrderController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({OrderExceptionHandler.class, GlobalExceptionHandler.class})
 class OrderControllerTest {
 
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");

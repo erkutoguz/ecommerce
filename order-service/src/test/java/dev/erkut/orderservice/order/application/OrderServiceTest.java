@@ -227,6 +227,42 @@ class OrderServiceTest {
     }
 
     @Test
+    void createFromCheckout_duplicateProduct_shouldThrowWithoutSaving() {
+        List<OrderLineSnapshot> snapshots = List.of(
+                new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 1),
+                new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 2)
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> orderService.createFromCheckout(
+                        SOURCE_CART_ID,
+                        CUSTOMER_ID,
+                        Currency.TRY,
+                        snapshots,
+                        CREATED_AT
+                )
+        );
+
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void getOrderById_unknownOrder_shouldThrowOrderNotFoundException() {
+        when(orderRepository.findWithItemsById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(OrderNotFoundException.class, () -> orderService.getOrderById(ORDER_ID));
+        verify(orderRepository).findWithItemsById(ORDER_ID);
+    }
+
+    @Test
+    void confirm_unknownOrder_shouldThrowOrderNotFoundException() {
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(OrderNotFoundException.class, () -> orderService.confirm(ORDER_ID, UPDATED_AT));
+    }
+
+    @Test
     void getOrderById_shouldReturnMappedOrder() {
         Order order = validOrder(CREATED_AT);
         when(orderRepository.findWithItemsById(ORDER_ID)).thenReturn(Optional.of(order));

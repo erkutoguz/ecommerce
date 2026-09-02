@@ -59,7 +59,7 @@ public class CartService {
             throw new IllegalArgumentException("Cart id cannot be null");
         }
 
-        return cartRepository.findById(cartId)
+        return cartRepository.findWithCartItemsById(cartId)
                 .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
     }
 
@@ -95,7 +95,7 @@ public class CartService {
             throw new IllegalArgumentException("Product id cannot be null");
         }
 
-        Cart cart = cartRepository.findById(cartId)
+        Cart cart = cartRepository.findWithCartItemsById(cartId)
                 .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
 
         cart.removeCartItem(productId, Instant.now());
@@ -107,11 +107,15 @@ public class CartService {
             throw new IllegalArgumentException("Cart id cannot be null");
         }
 
+        if (productId == null) {
+            throw new IllegalArgumentException("Product id cannot be null");
+        }
+
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
 
-        Cart cart = cartRepository.findById(cartId)
+        Cart cart = cartRepository.findWithCartItemsById(cartId)
                 .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
 
         cart.changeCartItemQuantity(productId, quantity, Instant.now());
@@ -129,7 +133,7 @@ public class CartService {
         }
     }
 
-    private List<ProductLookupResponse> validateProducts(List<UUID> productIds) {
+    void validateProducts(List<UUID> productIds) {
         List<ProductLookupResponse> products = productClient
                 .getProductsByIds(new ProductLookupRequest(productIds));
 
@@ -148,7 +152,6 @@ public class CartService {
                 throw new InvalidProductStateException("Product is not active");
             }
         }
-
     }
 
 }
