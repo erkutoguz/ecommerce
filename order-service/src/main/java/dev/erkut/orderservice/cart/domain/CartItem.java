@@ -52,26 +52,12 @@ public class CartItem {
         return new CartItem(cart, productId, quantity);
     }
 
-    void increaseQuantity(int quantity) {
+    void changeQuantity(int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
 
-        this.quantity += quantity;
-    }
-
-    void decreaseQuantity(int quantity) {
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-
-        int newQuantity = this.quantity - quantity;
-
-        if (newQuantity <= 0) {
-            throw new IllegalStateException("Quantity cannot be lower than one");
-        }
-
-        this.quantity = newQuantity;
+        this.quantity = quantity;
     }
 
     boolean hasProduct(UUID productId) {

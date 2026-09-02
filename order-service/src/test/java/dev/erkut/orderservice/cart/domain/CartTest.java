@@ -105,39 +105,27 @@ class CartTest {
         assertEquals(CREATED_AT, cart.getUpdatedAt());
     }
 
+
     @Test
-    void changeCartItemQuantity_increase_shouldIncreaseQuantity() {
+    void changeCartItemQuantity_higherQuantity_shouldSetQuantity() {
         Cart cart = Cart.create(CUSTOMER_ID, CREATED_AT);
         cart.addCartItem(PRODUCT_A, 2, CREATED_AT);
 
-        cart.changeCartItemQuantity(PRODUCT_A, 3, QuantityChangeType.INCREASE, UPDATED_AT);
+        cart.changeCartItemQuantity(PRODUCT_A, 5, UPDATED_AT);
 
         assertEquals(5, cart.getCartItems().getFirst().getQuantity());
         assertEquals(UPDATED_AT, cart.getUpdatedAt());
     }
 
     @Test
-    void changeCartItemQuantity_decrease_shouldDecreaseQuantity() {
+    void changeCartItemQuantity_lowerQuantity_shouldSetQuantity() {
         Cart cart = Cart.create(CUSTOMER_ID, CREATED_AT);
         cart.addCartItem(PRODUCT_A, 5, CREATED_AT);
 
-        cart.changeCartItemQuantity(PRODUCT_A, 2, QuantityChangeType.DECREASE, UPDATED_AT);
+        cart.changeCartItemQuantity(PRODUCT_A, 3, UPDATED_AT);
 
         assertEquals(3, cart.getCartItems().getFirst().getQuantity());
         assertEquals(UPDATED_AT, cart.getUpdatedAt());
-    }
-
-    @Test
-    void changeCartItemQuantity_decreaseToZeroOrBelow_shouldThrow() {
-        Cart cart = Cart.create(CUSTOMER_ID, CREATED_AT);
-        cart.addCartItem(PRODUCT_A, 2, CREATED_AT);
-
-        assertThrows(
-                IllegalStateException.class,
-                () -> cart.changeCartItemQuantity(PRODUCT_A, 2, QuantityChangeType.DECREASE, UPDATED_AT)
-        );
-        assertEquals(2, cart.getCartItems().getFirst().getQuantity());
-        assertEquals(CREATED_AT, cart.getUpdatedAt());
     }
 
     @Test
@@ -147,9 +135,14 @@ class CartTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> cart.changeCartItemQuantity(PRODUCT_A, 0, QuantityChangeType.INCREASE, UPDATED_AT)
+                () -> cart.changeCartItemQuantity(PRODUCT_A, 0, UPDATED_AT)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> cart.changeCartItemQuantity(PRODUCT_A, -1, UPDATED_AT)
         );
         assertEquals(2, cart.getCartItems().getFirst().getQuantity());
+        assertEquals(CREATED_AT, cart.getUpdatedAt());
     }
 
     @Test
@@ -159,7 +152,7 @@ class CartTest {
 
         assertThrows(
                 CartItemNotFoundException.class,
-                () -> cart.changeCartItemQuantity(PRODUCT_B, 1, QuantityChangeType.INCREASE, UPDATED_AT)
+                () -> cart.changeCartItemQuantity(PRODUCT_B, 1, UPDATED_AT)
         );
     }
 
@@ -249,7 +242,7 @@ class CartTest {
 
         assertThrows(
                 IllegalStateException.class,
-                () -> cart.changeCartItemQuantity(PRODUCT_A, 1, QuantityChangeType.INCREASE, UPDATED_AT)
+                () -> cart.changeCartItemQuantity(PRODUCT_A, 1, UPDATED_AT)
         );
         assertEquals(1, cart.getCartItems().getFirst().getQuantity());
     }
@@ -276,7 +269,7 @@ class CartTest {
 
         assertThrows(
                 IllegalStateException.class,
-                () -> cart.changeCartItemQuantity(PRODUCT_A, 1, QuantityChangeType.DECREASE, UPDATED_AT)
+                () -> cart.changeCartItemQuantity(PRODUCT_A, 1, UPDATED_AT)
         );
         assertEquals(1, cart.getCartItems().getFirst().getQuantity());
     }

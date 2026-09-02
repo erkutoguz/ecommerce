@@ -59,23 +59,14 @@ public class Cart {
 
     public void addCartItem(UUID productId, int quantity, Instant now) {
         ensureActive();
-        if(productId == null) {
-            throw new IllegalArgumentException("Product id cannot be null");
-        }
 
-        if(quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-
-        if (now == null) {
-            throw new IllegalArgumentException("Time cannot be null");
-        }
+        validateArguments(productId, quantity, now);
 
         cartItems.stream()
                 .filter(cartItem -> cartItem.hasProduct(productId))
                 .findFirst()
                 .ifPresentOrElse(
-                        cartItem -> cartItem.increaseQuantity(quantity),
+                        cartItem -> cartItem.changeQuantity(cartItem.getQuantity() + quantity),
                         () -> cartItems.add(
                                 CartItem.create(this, productId, quantity)
                         )
@@ -86,12 +77,10 @@ public class Cart {
 
     public void removeCartItem(UUID productId, Instant now) {
         ensureActive();
+        ensureNow(now);
+
         if(productId == null) {
             throw new IllegalArgumentException("Product id cannot be null");
-        }
-
-        if(now == null) {
-            throw new IllegalArgumentException("Time cannot be null");
         }
 
         CartItem cartItem = findCartItem(productId);
@@ -100,31 +89,14 @@ public class Cart {
         updateTime(now);
     }
 
-    public void changeCartItemQuantity(UUID productId, int quantity, QuantityChangeType type, Instant now) {
+    public void changeCartItemQuantity(UUID productId, int quantity, Instant now) {
         ensureActive();
-        if(productId == null) {
-            throw new IllegalArgumentException("Product id cannot be null");
-        }
 
-        if(type == null) {
-            throw new IllegalArgumentException("Change type cannot be null");
-        }
-
-        if(quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be greater than zero");
-        }
-
-        if(now == null) {
-            throw new IllegalArgumentException("Time cannot be null");
-        }
+        validateArguments(productId, quantity, now);
 
         CartItem cartItem = findCartItem(productId);
 
-        if(type == QuantityChangeType.INCREASE) {
-            cartItem.increaseQuantity(quantity);
-        } else if(type == QuantityChangeType.DECREASE) {
-            cartItem.decreaseQuantity(quantity);
-        }
+        cartItem.changeQuantity(quantity);
 
         updateTime(now);
     }
@@ -155,6 +127,20 @@ public class Cart {
 
         this.status = CartStatus.COMPLETED;
         updateTime(now);
+    }
+
+    private void validateArguments(UUID productId, int quantity, Instant now) {
+        if(productId == null) {
+            throw new IllegalArgumentException("Product id cannot be null");
+        }
+
+        if(quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero");
+        }
+
+        if(now == null) {
+            throw new IllegalArgumentException("Time cannot be null");
+        }
     }
 
     private void ensureActive() {
