@@ -1,8 +1,8 @@
-package dev.erkut.orderservice.cart.api.error;
+package dev.erkut.orderservice.checkout.api.error;
 
-import dev.erkut.orderservice.cart.api.CartController;
 import dev.erkut.orderservice.cart.application.exception.CartNotFoundException;
-import dev.erkut.orderservice.cart.domain.exception.CartItemNotFoundException;
+import dev.erkut.orderservice.checkout.api.CheckoutController;
+import dev.erkut.orderservice.checkout.application.exception.CartChangedDuringCheckoutException;
 import dev.erkut.orderservice.integration.customer.CustomerNotFoundException;
 import dev.erkut.orderservice.integration.customer.CustomerServiceUnavailableException;
 import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
@@ -18,14 +18,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = CartController.class)
-public class CartExceptionHandler {
+@RestControllerAdvice(assignableTypes = CheckoutController.class)
+public class CheckoutExceptionHandler {
 
     @ExceptionHandler({
             CartNotFoundException.class,
-            CartItemNotFoundException.class,
-            ProductNotFoundException.class,
-            CustomerNotFoundException.class
+            CustomerNotFoundException.class,
+            ProductNotFoundException.class
     })
     public ResponseEntity<Map<String, String>> handleNotFound(RuntimeException ex) {
         return error(HttpStatus.NOT_FOUND, ex.getMessage());
@@ -34,6 +33,7 @@ public class CartExceptionHandler {
     @ExceptionHandler({
             InvalidCustomerStateException.class,
             InvalidProductStateException.class,
+            CartChangedDuringCheckoutException.class,
             IllegalStateException.class
     })
     public ResponseEntity<Map<String, String>> handleConflict(RuntimeException ex) {
@@ -42,7 +42,7 @@ public class CartExceptionHandler {
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<Map<String, String>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
-        return error(HttpStatus.CONFLICT, "Cart was modified concurrently");
+        return error(HttpStatus.CONFLICT, "Cart was modified during checkout");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -61,7 +61,6 @@ public class CartExceptionHandler {
     private static ResponseEntity<Map<String, String>> error(HttpStatus status, String message) {
         Map<String, String> body = new HashMap<>();
         body.put("error", message);
-
         return ResponseEntity.status(status).body(body);
     }
 }

@@ -14,22 +14,18 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleMethodArgumentNotValidException(
-            MethodArgumentNotValidException ex
-    ) {
+    public ResponseEntity<Map<String, String>> handleMethodArgumentNotValidException(MethodArgumentNotValidException ex) {
         return validationError();
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
-    public ResponseEntity<Map<String, String>> handleHandlerMethodValidationException(
-            HandlerMethodValidationException ex
-    ) {
+    public ResponseEntity<Map<String, String>> handleHandlerMethodValidationException(HandlerMethodValidationException ex) {
         return validationError();
     }
 
     private static ResponseEntity<Map<String, String>> validationError() {
-        Map<String, String> errors = new HashMap<>();
-        errors.put("error", "Request validation failed");
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
+        Map<String, String> body = new HashMap<>();
+        body.put("error", "Request validation failed");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 }

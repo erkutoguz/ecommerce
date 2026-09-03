@@ -16,6 +16,10 @@ public class Cart {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
 
@@ -174,6 +178,10 @@ public class Cart {
 
     public UUID getId() {
         return id;
+    }
+
+    public long getVersion(){
+        return version;
     }
 
     public UUID getCustomerId() {

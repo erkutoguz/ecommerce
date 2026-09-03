@@ -39,12 +39,13 @@ class OrderExceptionHandlerTest {
 
     @Test
     void illegalArgument_shouldMapToBadRequest() {
-        ResponseEntity<Map<String, String>> response = handler.handleIllegalArgumentException(
-                new IllegalArgumentException("Rejection reason cannot be null")
+        ResponseEntity<Map<String, String>> response = handler.handleBadRequest(
+                        new IllegalArgumentException("Rejection reason cannot be null")
         );
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("Rejection reason cannot be null", response.getBody().get("error"));
     }
+
 }
