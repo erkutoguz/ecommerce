@@ -13,6 +13,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class OutboxService {
@@ -39,6 +40,16 @@ public class OutboxService {
         );
 
         outboxMessageRepository.save(message);
+    }
+
+    @Transactional
+    public void markPublished(UUID messageId, Instant now) {
+        OutboxMessage message = outboxMessageRepository.findById(messageId)
+                .orElseThrow(() ->
+                        new IllegalStateException("Outbox message not found: " + messageId)
+                );
+
+        message.markPublished(now);
     }
 
     private JsonNode serialize(Object event) {
