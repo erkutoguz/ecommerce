@@ -2,9 +2,10 @@ package dev.erkut.customerservice.customer.persistence;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
 import dev.erkut.customerservice.customer.api.request.CustomerCreateRequest;
-import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
+import dev.erkut.customerservice.customer.domain.Customer;
 import dev.erkut.customerservice.customer.domain.CustomerStatus;
 import dev.erkut.customerservice.customer.application.CustomerService;
+import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @Transactional
 @Testcontainers
 class CustomerPersistenceIntegrationTest {
+
+    private static final Instant CREATED_AT = Instant.parse("2026-09-05T12:30:15.123456Z");
+    private static final Instant DEACTIVATED_AT = Instant.parse("2026-09-05T12:30:16.654321Z");
 
     @Container
     @ServiceConnection
@@ -66,18 +70,18 @@ class CustomerPersistenceIntegrationTest {
 
     @Test
     void dirtyCheckingPersistsDeactivationAndUpdatedAtWithoutExplicitSave() {
-        var created = customerService.createCustomer(new CustomerCreateRequest(
-                "Dirty Checking Test", uniqueEmail("dirty"), null));
-        Instant createdAt = created.createdAt();
+        var created = Customer.create("Dirty Checking Test", uniqueEmail("dirty"), null, CREATED_AT);
+        customerRepository.save(created);
+        customerRepository.flush();
 
-        var deactivated = customerService.deactivateCustomer(created.customerId());
+        created.deactivateCustomer(DEACTIVATED_AT);
         customerRepository.flush();
         entityManager.clear();
 
-        var reloaded = customerRepository.findById(created.customerId()).orElseThrow();
+        var reloaded = customerRepository.findById(created.getId()).orElseThrow();
         assertEquals(CustomerStatus.INACTIVE, reloaded.getStatus());
-        assertEquals(createdAt, reloaded.getCreatedAt());
-        assertEquals(deactivated.updatedAt(), reloaded.getUpdatedAt());
+        assertEquals(CREATED_AT, reloaded.getCreatedAt());
+        assertEquals(DEACTIVATED_AT, reloaded.getUpdatedAt());
     }
 
     @Test

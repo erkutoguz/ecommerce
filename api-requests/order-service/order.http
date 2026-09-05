@@ -1,0 +1,22 @@
+### Get order by id
+GET {{orderBaseUrl}}/orders/{{orderId}}
+
+
+### Get orders - first page
+GET {{orderBaseUrl}}/orders?page=0&size=10
+
+
+### Get orders - second page
+GET {{orderBaseUrl}}/orders?page=1&size=10
+
+
+### Get orders by customer
+GET {{orderBaseUrl}}/orders?customerId={{customerId}}&page=0&size=10
+
+
+### Invalid page - expect 400
+GET {{orderBaseUrl}}/orders?page=-1&size=10
+
+
+### Order not found - expect 404
+GET {{orderBaseUrl}}/orders/99999999-9999-9999-9999-999999999999

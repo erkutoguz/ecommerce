@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public record OrderItemResponse(
-        UUID itemId,
-        String itemNameSnapshot,
-        BigDecimal itemPriceSnapshot,
-        Integer quantity
+        UUID productId,
+        String productNameSnapshot,
+        BigDecimal productPriceSnapshot,
+        int quantity
 ) {}

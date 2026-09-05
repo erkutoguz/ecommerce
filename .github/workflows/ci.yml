@@ -10,12 +10,19 @@ on:
       - main
 
 jobs:
-  order-service:
+  test:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: order-service
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - customer-service
+          - order-service
+          - product-service
+
+    name: Test ${{ matrix.service }}
 
     steps:
       - name: Checkout repository
@@ -27,7 +34,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          cache-dependency-path: order-service/pom.xml
+          cache-dependency-path: ${{ matrix.service }}/pom.xml
 
       - name: Run tests
+        working-directory: ${{ matrix.service }}
         run: ./mvnw test

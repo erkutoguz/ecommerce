@@ -1,0 +1,41 @@
+### Crete customer
+POST http://localhost:4002/customers
+Content-Type: application/json
+
+{
+  "name": "Checkout Test Customer",
+  "email": "checkout.{{$timestamp}}@example.com",
+  "phone": "+905551234567"
+}
+
+> {%
+    client.global.set("checkoutCustomerId", response.body.customerId);
+%}
+
+
+### Get/Create customer's open cart
+GET http://localhost:4002/carts/current?customerId={{checkoutCustomerId}}
+
+> {%
+    client.global.set("checkoutCartId", response.body.id);
+%}
+
+
+### Add active item to cart
+POST http://localhost:4002/carts/{{checkoutCartId}}/items
+Content-Type: application/json
+
+{
+  "productId": "{{productId}}",
+  "quantity": 3
+}
+
+
+
+### Checkout
+POST http://localhost:4002/carts/{{checkoutCartId}}/checkout
+Content-Type: application/json
+
+{
+  "currency": "TRY"
+}

@@ -1,18 +1,18 @@
 package dev.erkut.orderservice.order.api;
 
-import dev.erkut.orderservice.order.api.request.OrderCreateRequest;
-import dev.erkut.orderservice.order.api.request.OrderItemRequest;
-import dev.erkut.orderservice.order.api.request.OrderItemUpdateRequest;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
 import dev.erkut.orderservice.order.application.OrderService;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/orders")
@@ -22,12 +22,6 @@ public class OrderController {
 
     public OrderController(OrderService orderService) {
         this.orderService = orderService;
-    }
-
-    @PostMapping
-    public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody OrderCreateRequest req) {
-        OrderResponse response = orderService.createOrder(req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
@@ -44,49 +38,6 @@ public class OrderController {
     @GetMapping("/{orderId}")
     public ResponseEntity<OrderResponse> getOrderById(@PathVariable("orderId") UUID orderId) {
         OrderResponse response = orderService.getOrderById(orderId);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @PostMapping("/{orderId}/confirm")
-    public ResponseEntity<OrderResponse> confirmOrder(@PathVariable("orderId") UUID orderId) {
-        OrderResponse response = orderService.confirmOrder(orderId);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @PostMapping("/{orderId}/reject")
-    public ResponseEntity<OrderResponse> rejectOrder(@PathVariable("orderId") UUID orderId) {
-        OrderResponse response = orderService.rejectOrder(orderId);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @PostMapping("/{orderId}/cancel")
-    public ResponseEntity<OrderResponse> cancelOrder(@PathVariable("orderId") UUID orderId) {
-        OrderResponse response = orderService.cancelOrder(orderId);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @PostMapping("/{orderId}/items")
-    public ResponseEntity<OrderResponse> addOrderItem(
-            @PathVariable("orderId") UUID orderId,
-            @Valid @RequestBody OrderItemRequest req) {
-        OrderResponse response = orderService.addOrderItem(orderId, req);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @PatchMapping("/{orderId}/items/{itemId}")
-    public ResponseEntity<OrderResponse> updateOrderItem(
-            @PathVariable("orderId") UUID orderId,
-            @PathVariable("itemId") UUID itemId,
-            @Valid @RequestBody OrderItemUpdateRequest req
-    ) {
-        OrderResponse response = orderService.updateOrderItem(orderId, itemId, req);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @DeleteMapping("/{orderId}/items/{itemId}")
-    public ResponseEntity<OrderResponse> removeOrderItem(@PathVariable("orderId") UUID orderId,
-                                                         @PathVariable("itemId") UUID itemId) {
-        OrderResponse response = orderService.removeOrderItem(orderId, itemId);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 }

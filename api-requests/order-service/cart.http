@@ -1,0 +1,33 @@
+### Get current cart
+GET {{orderBaseUrl}}/carts/current?customerId={{customerId}}
+
+
+### Get cart
+GET {{orderBaseUrl}}/carts/{{cartId}}
+
+
+### Add item
+POST {{orderBaseUrl}}/carts/{{cartId}}/items
+Content-Type: application/json
+
+{
+  "productId": "{{productId}}",
+  "quantity": 2
+}
+
+
+### Change quantity
+PATCH {{orderBaseUrl}}/carts/{{cartId}}/items/{{productId}}
+Content-Type: application/json
+
+{
+  "quantity": 5
+}
+
+
+### Remove item
+DELETE {{orderBaseUrl}}/carts/{{cartId}}/items/{{productId}}
+
+
+### Cart not found - expect 404
+GET {{orderBaseUrl}}/carts/99999999-9999-9999-9999-999999999999

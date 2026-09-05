@@ -1,18 +1,13 @@
 package dev.erkut.orderservice.order.api;
 
-import dev.erkut.orderservice.integration.customer.CustomerNotFoundException;
-import dev.erkut.orderservice.integration.customer.CustomerServiceUnavailableException;
-import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
-import dev.erkut.orderservice.integration.product.InvalidProductStateException;
-import dev.erkut.orderservice.integration.product.ProductNotFoundException;
-import dev.erkut.orderservice.integration.product.ProductServiceUnavailableException;
-import dev.erkut.orderservice.order.api.error.GlobalExceptionHandler;
-import dev.erkut.orderservice.order.api.request.OrderItemRequest;
+import dev.erkut.orderservice.api.error.GlobalExceptionHandler;
+import dev.erkut.orderservice.order.api.error.OrderExceptionHandler;
+import dev.erkut.orderservice.order.api.response.OrderItemResponse;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
 import dev.erkut.orderservice.order.application.OrderService;
 import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.OrderStatus;
-import dev.erkut.orderservice.order.domain.exception.InvalidOrderStateException;
+import dev.erkut.orderservice.order.domain.exception.OrderNotFoundException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -24,29 +19,23 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrderController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({OrderExceptionHandler.class, GlobalExceptionHandler.class})
 class OrderControllerTest {
 
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static final UUID SOURCE_CART_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static final UUID PRODUCT_ID = UUID.fromString("90000000-0000-0000-0000-000000000001");
     private static final UUID ORDER_ID = UUID.fromString("80000000-0000-0000-0000-000000000001");
-    private static final UUID ITEM_ID = UUID.fromString("90000000-0000-0000-0000-000000000002");
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
 
     @Autowired
@@ -56,255 +45,23 @@ class OrderControllerTest {
     private OrderService orderService;
 
     @Test
-    void createOrder_validRequest_shouldReturnSuccessStatus() throws Exception {
-        // Arrange
-        when(orderService.createOrder(any())).thenReturn(new OrderResponse(
-                null,
-                CUSTOMER_ID,
-                List.of(),
-                OrderStatus.PENDING,
-                Currency.TRY,
-                new BigDecimal("0.00"),
-                CREATED_AT,
-                CREATED_AT
-        ));
-        String requestBody = """
-                {
-                  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                  "currency": "TRY",
-                  "items": [
-                    {
-                      "itemId": "90000000-0000-0000-0000-000000000001",
-                      "quantity": 2
-                    }
-                  ]
-                }
-                """;
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders")
-                        .contentType("application/json")
-                        .content(requestBody))
-                .andExpect(status().isCreated());
-    }
-
-    @Test
-    void createOrder_emptyItems_shouldReturnBadRequest() throws Exception {
-        // Arrange
-        String requestBody = """
-                {
-                  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                  "currency": "TRY",
-                  "items": []
-                }
-                """;
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders")
-                        .contentType("application/json")
-                        .content(requestBody))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void createOrder_customerNotFound_shouldReturnNotFound() throws Exception {
-        // Arrange
-        when(orderService.createOrder(any()))
-                .thenThrow(new CustomerNotFoundException("Customer not found"));
-        String requestBody = """
-                {
-                  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                  "currency": "TRY",
-                  "items": [
-                    {
-                      "itemId": "90000000-0000-0000-0000-000000000001",
-                      "quantity": 1
-                    }
-                  ]
-                }
-                """;
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders")
-                        .contentType("application/json")
-                        .content(requestBody))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void createOrder_inactiveCustomer_shouldReturnConflict() throws Exception {
-        when(orderService.createOrder(any()))
-                .thenThrow(new InvalidCustomerStateException("Customer is not active"));
-
-        mockMvc.perform(post("/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validCreateOrderRequest()))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("Customer is not active"));
-    }
-
-    @Test
-    void createOrder_customerServiceUnavailable_shouldReturn503WithErrorContract() throws Exception {
-        when(orderService.createOrder(any()))
-                .thenThrow(new CustomerServiceUnavailableException("Customer service unavailable"));
-
-        mockMvc.perform(post("/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validCreateOrderRequest()))
-                .andExpect(jsonPath("$.error").value("Customer service unavailable"))
-                .andExpect(status().isServiceUnavailable());
-    }
-
-    @Test
-    void createOrder_productNotFound_shouldReturnNotFound() throws Exception {
-        // Arrange
-        when(orderService.createOrder(any()))
-                .thenThrow(new ProductNotFoundException("Product not found"));
-        String requestBody = """
-                {
-                  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                  "currency": "TRY",
-                  "items": [
-                    {
-                      "itemId": "90000000-0000-0000-0000-000000000099",
-                      "quantity": 1
-                    }
-                  ]
-                }
-                """;
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders")
-                        .contentType("application/json")
-                        .content(requestBody))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void createOrder_inactiveProduct_shouldReturnConflictWithErrorContract() throws Exception {
-        when(orderService.createOrder(any()))
-                .thenThrow(new InvalidProductStateException("Product is not active"));
-
-        mockMvc.perform(post("/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validCreateOrderRequest()))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("Product is not active"));
-    }
-
-    @Test
-    void createOrder_productServiceUnavailable_shouldReturn503WithErrorContract() throws Exception {
-        when(orderService.createOrder(any()))
-                .thenThrow(new ProductServiceUnavailableException("Product service unavailable"));
-
-        mockMvc.perform(post("/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validCreateOrderRequest()))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value("Product service unavailable"));
-    }
-
-    @Test
-    void addOrderItem_validRequest_shouldReturnSuccessStatus() throws Exception {
-        // Arrange
-        when(orderService.addOrderItem(eq(ORDER_ID), eq(new OrderItemRequest(PRODUCT_ID, 2))))
-                .thenReturn(orderResponse());
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":2}"))
-                .andExpect(status().isOk());
-        verify(orderService).addOrderItem(ORDER_ID, new OrderItemRequest(PRODUCT_ID, 2));
-    }
-
-    @Test
-    void addOrderItem_invalidQuantity_shouldReturnBadRequest() throws Exception {
-        // Arrange
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":0}"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":-1}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void addOrderItem_missingOrNullItemId_shouldReturnBadRequest() throws Exception {
-        // Arrange
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"quantity\":1}"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":null,\"quantity\":1}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void addOrderItem_productNotFound_shouldReturnNotFound() throws Exception {
-        // Arrange
-        when(orderService.addOrderItem(eq(ORDER_ID), any(OrderItemRequest.class)))
-                .thenThrow(new ProductNotFoundException("Product not found"));
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000099\",\"quantity\":1}"))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void addOrderItem_nonPendingOrder_shouldReturnConflict() throws Exception {
-        // Arrange
-        when(orderService.addOrderItem(eq(ORDER_ID), any(OrderItemRequest.class)))
-                .thenThrow(new InvalidOrderStateException("Order cannot be modified"));
-
-        // Act
-        // Assert
-        mockMvc.perform(post("/orders/{orderId}/items", ORDER_ID)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"90000000-0000-0000-0000-000000000001\",\"quantity\":1}"))
-                .andExpect(status().isConflict());
-    }
-
-    @Test
     void getOrders_validPageAndSize_shouldReturnSuccessStatus() throws Exception {
-        // Arrange
         when(orderService.getOrders(null, 1, 5)).thenReturn(pageOfOrders());
 
-        // Act
-        // Assert
         mockMvc.perform(get("/orders")
                         .param("page", "1")
                         .param("size", "5"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1));
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].sourceCartId").value(SOURCE_CART_ID.toString()))
+                .andExpect(jsonPath("$.content[0].status").value("PENDING_STOCK"));
         verify(orderService).getOrders(null, 1, 5);
     }
 
     @Test
     void getOrders_withCustomerId_shouldReturnSuccessStatus() throws Exception {
-        // Arrange
         when(orderService.getOrders(CUSTOMER_ID, 0, 10)).thenReturn(pageOfOrders());
 
-        // Act
-        // Assert
         mockMvc.perform(get("/orders")
                         .param("customerId", CUSTOMER_ID.toString()))
                 .andExpect(status().isOk());
@@ -313,10 +70,6 @@ class OrderControllerTest {
 
     @Test
     void getOrders_invalidPageOrSize_shouldReturnBadRequest() throws Exception {
-        // Arrange
-
-        // Act
-        // Assert
         mockMvc.perform(get("/orders").param("page", "-1"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get("/orders").param("size", "0"))
@@ -324,61 +77,52 @@ class OrderControllerTest {
     }
 
     @Test
-    void removeOrderItem_validRequest_shouldReturnSuccessStatus() throws Exception {
-        // Arrange
-        when(orderService.removeOrderItem(ORDER_ID, ITEM_ID)).thenReturn(orderResponse());
+    void getOrderById_existingOrder_shouldReturnSuccessStatus() throws Exception {
+        when(orderService.getOrderById(ORDER_ID)).thenReturn(orderResponse());
 
-        // Act
-        // Assert
-        mockMvc.perform(delete("/orders/{orderId}/items/{itemId}", ORDER_ID, ITEM_ID))
-                .andExpect(status().isOk());
-        verify(orderService).removeOrderItem(ORDER_ID, ITEM_ID);
+        mockMvc.perform(get("/orders/{orderId}", ORDER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderId").value(ORDER_ID.toString()))
+                .andExpect(jsonPath("$.sourceCartId").value(SOURCE_CART_ID.toString()))
+                .andExpect(jsonPath("$.status").value("PENDING_STOCK"))
+                .andExpect(jsonPath("$.items[0].productId").value(PRODUCT_ID.toString()))
+                .andExpect(jsonPath("$.totalAmount").value(200.00));
+        verify(orderService).getOrderById(ORDER_ID);
     }
 
     @Test
-    void updateOrderItem_validRequest_shouldReturnSuccessStatus() throws Exception {
-        // Arrange
-        when(orderService.updateOrderItem(any(UUID.class), any(UUID.class), any()))
-                .thenReturn(orderResponse());
+    void getOrderById_unknownOrder_shouldReturnNotFound() throws Exception {
+        when(orderService.getOrderById(ORDER_ID))
+                .thenThrow(new OrderNotFoundException("Order not found with id: " + ORDER_ID));
 
-        // Act
-        // Assert
-        mockMvc.perform(patch("/orders/{orderId}/items/{itemId}", ORDER_ID, ITEM_ID)
-                        .contentType("application/json")
-                        .content("{\"quantity\":3}"))
-                .andExpect(status().isOk());
-        verify(orderService).updateOrderItem(any(UUID.class), any(UUID.class), any());
+        mockMvc.perform(get("/orders/{orderId}", ORDER_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Order not found with id: " + ORDER_ID));
     }
 
     private Page<OrderResponse> pageOfOrders() {
         return new PageImpl<>(List.of(orderResponse()), PageRequest.of(0, 10), 1);
     }
 
-    private String validCreateOrderRequest() {
-        return """
-                {
-                  "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                  "currency": "TRY",
-                  "items": [
-                    {
-                      "itemId": "90000000-0000-0000-0000-000000000001",
-                      "quantity": 1
-                    }
-                  ]
-                }
-                """;
-    }
-
     private OrderResponse orderResponse() {
         return new OrderResponse(
                 ORDER_ID,
+                SOURCE_CART_ID,
                 CUSTOMER_ID,
-                List.of(),
-                OrderStatus.PENDING,
+                List.of(new OrderItemResponse(
+                        PRODUCT_ID,
+                        "Product A",
+                        new BigDecimal("100.00"),
+                        2
+                )),
+                OrderStatus.PENDING_STOCK,
+                null,
                 Currency.TRY,
-                new BigDecimal("0.00"),
+                new BigDecimal("200.00"),
                 CREATED_AT,
-                CREATED_AT
+                CREATED_AT,
+                null,
+                null
         );
     }
 }
