@@ -18,9 +18,9 @@ public class KafkaMessagePublisher {
 
     public CompletableFuture<SendResult<String, MessageEnvelope>> publish(
             String topic,
-            UUID key,
+            UUID aggregateId,
             MessageEnvelope envelope
     ) {
-        return kafkaTemplate.send(topic, key.toString(), envelope);
+        return kafkaTemplate.send(topic, aggregateId.toString(), envelope);
     }
 }

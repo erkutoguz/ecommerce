@@ -21,7 +21,6 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -152,6 +151,38 @@ services:
     networks:
       - product-db-network
 
+  order-workflow-service:
+    build:
+      context: ./order-workflow-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://order-workflow-db:5432/order-workflow
+      SPRING_DATASOURCE_USERNAME: order-workflow
+      SPRING_DATASOURCE_PASSWORD: order-workflow-pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      order-workflow-db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - app-network
+      - order-workflow-db-network
+
+  order-workflow-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: order-workflow
+      POSTGRES_USER: order-workflow
+      POSTGRES_PASSWORD: order-workflow-pass
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U order-workflow -d order-workflow" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - order-workflow-db-network
+
+
 
 networks:
   app-network:
@@ -163,4 +194,7 @@ networks:
     internal: true
 
   product-db-network:
+    internal: true
+
+  order-workflow-db-network:
     internal: true

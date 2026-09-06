@@ -1,4 +1,4 @@
-CREATE TABLE order_outbox_messages (
+CREATE TABLE outbox_messages (
     id              UUID PRIMARY KEY,
     status          VARCHAR(20) NOT NULL,
     message_type    VARCHAR(40) NOT NULL,
@@ -7,12 +7,12 @@ CREATE TABLE order_outbox_messages (
     created_at      TIMESTAMP WITH TIME ZONE NOT NULL,
     published_at    TIMESTAMP WITH TIME ZONE,
 
-    CONSTRAINT chk_order_outbox_status
+    CONSTRAINT chk_outbox_status
         CHECK (status IN ('PENDING', 'PUBLISHED')),
 
-    CONSTRAINT chk_order_outbox_message_type
-        CHECK (message_type IN ('ORDER_CHECKOUT_STARTED'))
+    CONSTRAINT chk_outbox_message_type
+        CHECK (message_type IN ('RESERVE_STOCK_COMMAND'))
 );
 
-CREATE INDEX idx_order_outbox_status_created_at
-    ON order_outbox_messages(status, created_at);
+CREATE INDEX idx_outbox_status_created_at
+    ON outbox_messages(status, created_at);

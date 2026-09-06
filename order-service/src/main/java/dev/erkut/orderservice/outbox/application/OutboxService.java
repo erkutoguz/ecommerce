@@ -4,6 +4,7 @@ import dev.erkut.orderservice.message.event.OrderCheckoutStartedEvent;
 import dev.erkut.orderservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.orderservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
+import dev.erkut.orderservice.outbox.domain.OutboxStatus;
 import dev.erkut.orderservice.outbox.domain.exception.InvalidOutboxMessageException;
 import dev.erkut.orderservice.outbox.persistence.OutboxMessageRepository;
 import org.springframework.stereotype.Service;
@@ -13,19 +14,28 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class OutboxService {
-    private final OutboxMessageRepository outboxMessageRepository;
+    private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
-    public OutboxService(OutboxMessageRepository outboxMessageRepository, JsonMapper jsonMapper) {
-        this.outboxMessageRepository = outboxMessageRepository;
+    public OutboxService(OutboxMessageRepository outboxRepository, JsonMapper jsonMapper) {
+        this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
     }
 
+    @Transactional(readOnly = true)
+    public List<OutboxMessage> findPendingMessages() {
+        return outboxRepository
+                .findTop100ByStatusOrderByCreatedAtAsc(
+                        OutboxStatus.PENDING
+                );
+    }
+
     @Transactional
-    public void createOrderCheckoutStartedMessage(OrderCheckoutStartedEvent event, Instant now) {
+    public void createOrderCheckoutStartedMessage(OrderCheckoutStartedEvent event, Instant createdAt) {
         if (event == null) {
             throw new InvalidOutboxMessageException("Event cannot be null");
         }
@@ -36,20 +46,20 @@ public class OutboxService {
                 event.orderId(),
                 OutboxMessageType.ORDER_CHECKOUT_STARTED,
                 payload,
-                now
+                createdAt
         );
 
-        outboxMessageRepository.save(message);
+        outboxRepository.save(message);
     }
 
     @Transactional
-    public void markPublished(UUID messageId, Instant now) {
-        OutboxMessage message = outboxMessageRepository.findById(messageId)
+    public void markPublished(UUID messageId, Instant publishedAt) {
+        OutboxMessage message = outboxRepository.findById(messageId)
                 .orElseThrow(() ->
                         new IllegalStateException("Outbox message not found: " + messageId)
                 );
 
-        message.markPublished(now);
+        message.markPublished(publishedAt);
     }
 
     private JsonNode serialize(Object event) {

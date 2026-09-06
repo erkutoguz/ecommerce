@@ -1,0 +1,11 @@
+package dev.erkut.orderworkflowservice.saga.domain;
+
+public enum OrderSagaState {
+    STOCK_RESERVATION_PENDING,
+    PAYMENT_PENDING,
+    PAYMENT_UNKNOWN,
+    STOCK_CONFIRMATION_PENDING,
+    STOCK_RELEASE_PENDING,
+    COMPLETED,
+    FAILED
+}

@@ -60,7 +60,7 @@ class OutboxMessageTest {
     }
 
     @Test
-    void create_nullNow_shouldThrowInvalidOutboxMessageException() {
+    void create_nullCreatedAt_shouldThrowInvalidOutboxMessageException() {
         assertThrows(InvalidOutboxMessageException.class, () ->
                 OutboxMessage.create(AGGREGATE_ID, OutboxMessageType.ORDER_CHECKOUT_STARTED, PAYLOAD, null)
         );

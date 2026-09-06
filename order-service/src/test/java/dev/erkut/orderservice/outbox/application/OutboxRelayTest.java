@@ -1,11 +1,11 @@
 package dev.erkut.orderservice.outbox.application;
 
 import dev.erkut.orderservice.message.MessageEnvelope;
+import dev.erkut.orderservice.messaging.kafka.config.KafkaTopicsProperties;
 import dev.erkut.orderservice.messaging.kafka.producer.KafkaMessagePublisher;
 import dev.erkut.orderservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderservice.outbox.domain.OutboxStatus;
-import dev.erkut.orderservice.outbox.persistence.OutboxMessageRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -43,9 +43,6 @@ class OutboxRelayTest {
     );
 
     @Mock
-    private OutboxMessageRepository outboxMessageRepository;
-
-    @Mock
     private OutboxService outboxService;
 
     @Mock
@@ -56,10 +53,9 @@ class OutboxRelayTest {
     @BeforeEach
     void setUp() {
         outboxRelay = new OutboxRelay(
-                outboxMessageRepository,
                 outboxService,
                 messagePublisher,
-                TOPIC
+                new KafkaTopicsProperties(TOPIC)
         );
     }
 
@@ -70,7 +66,7 @@ class OutboxRelayTest {
         CompletableFuture<SendResult<String, MessageEnvelope>> sendFuture = CompletableFuture.completedFuture(null);
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
 
-        when(outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING))
+        when(outboxService.findPendingMessages())
                 .thenReturn(List.of(message));
         when(messagePublisher.publish(eq(TOPIC), eq(aggregateId), envelopeCaptor.capture()))
                 .thenReturn(sendFuture);
@@ -93,7 +89,7 @@ class OutboxRelayTest {
         CompletableFuture<SendResult<String, MessageEnvelope>> sendFuture = new CompletableFuture<>();
         sendFuture.completeExceptionally(failure);
 
-        when(outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING))
+        when(outboxService.findPendingMessages())
                 .thenReturn(List.of(message));
         when(messagePublisher.publish(eq(TOPIC), eq(aggregateId), any(MessageEnvelope.class)))
                 .thenReturn(sendFuture);
@@ -107,12 +103,13 @@ class OutboxRelayTest {
 
     @Test
     void relay_shouldDoNothingWhenNoPendingMessagesExist() {
-        when(outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING))
+        when(outboxService.findPendingMessages())
                 .thenReturn(List.of());
 
         outboxRelay.relay();
 
-        verifyNoInteractions(messagePublisher, outboxService);
+        verifyNoInteractions(messagePublisher);
+        verify(outboxService, never()).markPublished(any(UUID.class), any(Instant.class));
     }
 
     @Test
@@ -129,7 +126,7 @@ class OutboxRelayTest {
         ArgumentCaptor<UUID> keyCaptor = ArgumentCaptor.forClass(UUID.class);
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
 
-        when(outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING))
+        when(outboxService.findPendingMessages())
                 .thenReturn(List.of(firstMessage, secondMessage));
         when(messagePublisher.publish(eq(TOPIC), keyCaptor.capture(), envelopeCaptor.capture()))
                 .thenReturn(sendFuture);
