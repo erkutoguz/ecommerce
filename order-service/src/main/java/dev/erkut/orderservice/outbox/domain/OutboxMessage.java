@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "order_outbox_messages")
+@Table(name = "outbox_messages")
 public class OutboxMessage {
 
     @Id
@@ -39,7 +39,12 @@ public class OutboxMessage {
 
     protected OutboxMessage () {}
 
-    private OutboxMessage (UUID aggregateId, OutboxMessageType messageType, JsonNode payload, Instant now) {
+    private OutboxMessage(
+            UUID aggregateId,
+            OutboxMessageType messageType,
+            JsonNode payload,
+            Instant createdAt
+    ) {
         if (aggregateId == null) {
             throw new InvalidOutboxMessageException("Aggregate id cannot be null");
         }
@@ -52,7 +57,7 @@ public class OutboxMessage {
             throw new InvalidOutboxMessageException("Payload cannot be null");
         }
 
-        if (now == null) {
+        if (createdAt == null) {
             throw new InvalidOutboxMessageException("Creation time cannot be null");
         }
 
@@ -62,7 +67,7 @@ public class OutboxMessage {
         this.messageType = messageType;
         this.payload = payload;
         this.status = OutboxStatus.PENDING;
-        this.createdAt = now;
+        this.createdAt = createdAt;
         this.publishedAt = null;
     }
 
@@ -70,9 +75,9 @@ public class OutboxMessage {
             UUID aggregateId,
             OutboxMessageType messageType,
             JsonNode payload,
-            Instant now
+            Instant createdAt
     ) {
-        return new OutboxMessage(aggregateId, messageType, payload, now);
+        return new OutboxMessage(aggregateId, messageType, payload, createdAt);
     }
 
     public UUID getId() {
@@ -103,17 +108,17 @@ public class OutboxMessage {
         return publishedAt;
     }
 
-    public void markPublished(Instant now) {
-        if(now == null) {
+    public void markPublished(Instant publishedAt) {
+        if (publishedAt == null) {
             throw new InvalidOutboxMessageException("Publish time cannot be null");
         }
 
-        if(status != OutboxStatus.PENDING) {
+        if (status != OutboxStatus.PENDING) {
             throw new InvalidOutboxMessageException("Only pending outbox messages can be published");
         }
 
         status = OutboxStatus.PUBLISHED;
-        publishedAt = now;
+        this.publishedAt = publishedAt;
     }
 
 }
