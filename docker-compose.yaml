@@ -130,9 +130,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://product-db:5432/product
       SPRING_DATASOURCE_USERNAME: product
       SPRING_DATASOURCE_PASSWORD: product-pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     depends_on:
       product-db:
         condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - app-network
       - product-db-network
@@ -182,7 +185,36 @@ services:
     networks:
       - order-workflow-db-network
 
+  stock-service:
+    build:
+      context: ./stock-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://stock-db:5432/stock
+      SPRING_DATASOURCE_USERNAME: stock
+      SPRING_DATASOURCE_PASSWORD: stock-pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      stock-db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - app-network
+      - stock-db-network
 
+  stock-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: stock
+      POSTGRES_USER: stock
+      POSTGRES_PASSWORD: stock-pass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock -d stock"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stock-db-network
 
 networks:
   app-network:
@@ -197,4 +229,7 @@ networks:
     internal: true
 
   order-workflow-db-network:
+    internal: true
+
+  stock-db-network:
     internal: true

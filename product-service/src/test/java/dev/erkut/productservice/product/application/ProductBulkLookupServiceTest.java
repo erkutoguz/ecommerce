@@ -6,6 +6,7 @@ import dev.erkut.productservice.product.domain.exception.ProductNotFoundExceptio
 import dev.erkut.productservice.product.domain.Product;
 import dev.erkut.productservice.product.domain.ProductStatus;
 import dev.erkut.productservice.product.persistence.ProductRepository;
+import dev.erkut.productservice.outbox.application.OutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -36,8 +37,11 @@ class ProductBulkLookupServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private OutboxService outboxService;
+
     private ProductService productService() {
-        return new ProductService(productRepository);
+        return new ProductService(productRepository, outboxService);
     }
 
     @Test

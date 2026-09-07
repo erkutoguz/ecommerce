@@ -19,6 +19,7 @@
         <module>order-service</module>
         <module>product-service</module>
         <module>order-workflow-service</module>
+        <module>stock-service</module>
     </modules>
 
 </project>
