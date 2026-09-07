@@ -1,6 +1,7 @@
 package dev.erkut.productservice.product.application;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.productservice.outbox.application.OutboxService;
 import dev.erkut.productservice.product.api.request.ProductBulkRequest;
 import dev.erkut.productservice.product.api.request.ProductCreateRequest;
@@ -86,8 +87,12 @@ public class ProductService {
 
     @Transactional
     public ProductResponse deactivateProduct(UUID productId) {
+        Instant now = Instant.now();
         Product product = findProductWithId(productId);
-        product.deactivateProduct(Instant.now());
+        product.deactivateProduct(now);
+
+        ProductDeactivatedEvent event = new ProductDeactivatedEvent(product.getId());
+        outboxService.createProductDeactivatedEvent(event, now);
         return ProductMapper.toResponse(product);
     }
 

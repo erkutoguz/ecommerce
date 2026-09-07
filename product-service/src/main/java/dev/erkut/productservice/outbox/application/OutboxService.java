@@ -1,6 +1,7 @@
 package dev.erkut.productservice.outbox.application;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.productservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.productservice.outbox.domain.OutboxMessage;
 import dev.erkut.productservice.outbox.domain.OutboxMessageType;
@@ -43,6 +44,24 @@ public class OutboxService {
         outboxRepository.save(message);
     }
 
+    @Transactional
+    public void createProductDeactivatedEvent(ProductDeactivatedEvent event, Instant deactivatedAt) {
+        if(event == null) {
+            throw new IllegalArgumentException("Product created event cannot be null");
+        }
+
+        JsonNode payload = serialize(event);
+        OutboxMessage message = OutboxMessage.create(
+                event.productId(),
+                OutboxMessageType.PRODUCT_DEACTIVATED_EVENT,
+                payload,
+                deactivatedAt
+        );
+
+        outboxRepository.save(message);
+
+    }
+
     @Transactional(readOnly = true)
     public List<OutboxMessage> findPendingMessages() {
         return outboxRepository.findTop100ByStatusOrderByCreatedAtAsc(
@@ -60,11 +79,11 @@ public class OutboxService {
         message.markPublished(publishedAt);
     }
 
-    public JsonNode serialize(ProductCreatedEvent event) {
+    public JsonNode serialize(Object event) {
         try {
             return jsonMapper.valueToTree(event);
         } catch (JacksonException exception) {
-            throw new OutboxSerializationException("Product created event could not be serialized", exception);
+            throw new OutboxSerializationException("Event object could not be serialized", exception);
         }
     }
 }

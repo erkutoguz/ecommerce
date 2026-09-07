@@ -4,6 +4,8 @@ import dev.erkut.stockservice.inbox.domain.InboxMessage;
 import dev.erkut.stockservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
+import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.stockservice.stock.domain.exception.StockItemNotFoundException;
 import dev.erkut.stockservice.stock.domain.StockItem;
 import dev.erkut.stockservice.stock.persistence.StockItemRepository;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,8 @@ import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
 @Testcontainers
@@ -73,6 +77,67 @@ class StockServiceIntegrationTest {
 
         assertEquals(1, inboxRepository.findById(messageId).stream().count());
         assertEquals(1, stockItemRepository.findById(productId).stream().count());
+    }
+
+    @Test
+    void productDeactivationDeactivatesExistingStockItemAndRegistersInbox() {
+        UUID messageId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        stockItemRepository.saveAndFlush(StockItem.create(productId, Instant.now()));
+        MessageEnvelope envelope = new MessageEnvelope(
+                messageId,
+                "PRODUCT_DEACTIVATED_EVENT",
+                Instant.now(),
+                new JsonMapper().valueToTree(new ProductDeactivatedEvent(productId)));
+
+        stockService.handleProductDeactivated(envelope, new ProductDeactivatedEvent(productId));
+
+        StockItem item = stockItemRepository.findById(productId).orElseThrow();
+        InboxMessage inbox = inboxRepository.findById(messageId).orElseThrow();
+        assertEquals(productId, item.getProductId());
+        assertFalse(item.isActive());
+        assertEquals(messageId, inbox.getMessageId());
+        assertEquals("PRODUCT_DEACTIVATED_EVENT", inbox.getMessageType());
+        assertEquals(productId, inbox.getAggregateId());
+    }
+
+    @Test
+    void duplicateProductDeactivationMessageDoesNotApplyAnAdditionalEffect() {
+        UUID messageId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        stockItemRepository.saveAndFlush(StockItem.create(productId, Instant.now()));
+        MessageEnvelope envelope = new MessageEnvelope(
+                messageId,
+                "PRODUCT_DEACTIVATED_EVENT",
+                Instant.now(),
+                new JsonMapper().valueToTree(new ProductDeactivatedEvent(productId)));
+        ProductDeactivatedEvent event = new ProductDeactivatedEvent(productId);
+
+        stockService.handleProductDeactivated(envelope, event);
+        assertDoesNotThrow(() -> stockService.handleProductDeactivated(envelope, event));
+
+        assertFalse(stockItemRepository.findById(productId).orElseThrow().isActive());
+        assertEquals(1, inboxRepository.findById(messageId).stream().count());
+    }
+
+    @Test
+    void missingStockItemRollsBackProductDeactivationInboxClaim() {
+        UUID messageId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        MessageEnvelope envelope = new MessageEnvelope(
+                messageId,
+                "PRODUCT_DEACTIVATED_EVENT",
+                Instant.now(),
+                new JsonMapper().valueToTree(new ProductDeactivatedEvent(productId)));
+        ProductDeactivatedEvent event = new ProductDeactivatedEvent(productId);
+
+        assertThrows(StockItemNotFoundException.class,
+                () -> stockService.handleProductDeactivated(envelope, event));
+        assertFalse(inboxRepository.existsById(messageId));
+
+        assertThrows(StockItemNotFoundException.class,
+                () -> stockService.handleProductDeactivated(envelope, event));
+        assertFalse(inboxRepository.existsById(messageId));
     }
 
     @Test

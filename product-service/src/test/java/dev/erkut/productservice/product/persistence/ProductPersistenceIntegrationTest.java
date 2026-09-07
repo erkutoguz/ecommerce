@@ -5,6 +5,7 @@ import dev.erkut.productservice.product.domain.Product;
 import dev.erkut.productservice.product.domain.ProductStatus;
 import dev.erkut.productservice.product.application.ProductService;
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.productservice.outbox.domain.OutboxMessage;
 import dev.erkut.productservice.outbox.domain.OutboxMessageType;
 import dev.erkut.productservice.outbox.domain.OutboxStatus;
@@ -130,5 +131,35 @@ class ProductPersistenceIntegrationTest {
         var reloaded = productRepository.findById(created.getId()).orElseThrow();
         assertEquals(ProductStatus.INACTIVE, reloaded.getStatus());
         assertEquals(UPDATED_AT, reloaded.getUpdatedAt());
+    }
+
+    @Test
+    void productDeactivationPersistsInactiveProductAndPendingOutboxEvent() throws Exception {
+        var created = Product.create("Active Product", new BigDecimal("25.50"), CREATED_AT);
+        productRepository.save(created);
+        productRepository.flush();
+
+        productService.deactivateProduct(created.getId());
+        productRepository.flush();
+        entityManager.clear();
+
+        var reloaded = productRepository.findById(created.getId()).orElseThrow();
+        var relevantMessages = outboxMessageRepository
+                .findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
+                .stream()
+                .filter(message -> message.getAggregateId().equals(created.getId()))
+                .toList();
+
+        assertEquals(ProductStatus.INACTIVE, reloaded.getStatus());
+        assertEquals(1, relevantMessages.size());
+
+        var outbox = relevantMessages.getFirst();
+        assertEquals(OutboxMessageType.PRODUCT_DEACTIVATED_EVENT, outbox.getMessageType());
+        assertEquals(created.getId(), outbox.getAggregateId());
+        assertEquals(OutboxStatus.PENDING, outbox.getStatus());
+        assertEquals(created.getId(),
+                new tools.jackson.databind.json.JsonMapper()
+                        .treeToValue(outbox.getPayload(), ProductDeactivatedEvent.class)
+                        .productId());
     }
 }

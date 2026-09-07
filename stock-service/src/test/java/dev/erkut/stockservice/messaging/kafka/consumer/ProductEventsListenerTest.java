@@ -2,6 +2,7 @@ package dev.erkut.stockservice.messaging.kafka.consumer;
 
 import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
+import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.stockservice.stock.application.StockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class ProductEventsListenerTest {
     @Test
     void productCreatedEventIsDeserializedAndDelegated() throws Exception {
         MessageEnvelope envelope = envelope(
-                "PRODUCT_CREATED",
+                "PRODUCT_CREATED_EVENT",
                 jsonMapper.valueToTree(new ProductCreatedEvent(PRODUCT_ID)));
         ArgumentCaptor<ProductCreatedEvent> eventCaptor =
                 ArgumentCaptor.forClass(ProductCreatedEvent.class);
@@ -53,6 +54,20 @@ class ProductEventsListenerTest {
         listener.listenProductEvent(envelope);
 
         verify(stockService).handleProductCreated(eq(envelope), eventCaptor.capture());
+        assertEquals(PRODUCT_ID, eventCaptor.getValue().productId());
+    }
+
+    @Test
+    void productDeactivatedEventIsDeserializedAndDelegated() throws Exception {
+        MessageEnvelope envelope = envelope(
+                "PRODUCT_DEACTIVATED_EVENT",
+                jsonMapper.valueToTree(new ProductDeactivatedEvent(PRODUCT_ID)));
+        ArgumentCaptor<ProductDeactivatedEvent> eventCaptor =
+                ArgumentCaptor.forClass(ProductDeactivatedEvent.class);
+
+        listener.listenProductEvent(envelope);
+
+        verify(stockService).handleProductDeactivated(eq(envelope), eventCaptor.capture());
         assertEquals(PRODUCT_ID, eventCaptor.getValue().productId());
     }
 

@@ -1,6 +1,7 @@
 package dev.erkut.stockservice.message;
 
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
+import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -21,5 +22,17 @@ class MessageContractTest {
         assertEquals(productId.toString(), payload.get("productId").asText());
         assertEquals(productId,
                 mapper.treeToValue(payload, ProductCreatedEvent.class).productId());
+    }
+
+    @Test
+    void productDeactivatedEventMatchesProducerWireShape() throws Exception {
+        UUID productId = UUID.fromString("90000000-0000-0000-0000-000000000001");
+        JsonMapper mapper = new JsonMapper();
+
+        var payload = mapper.readTree("{\"productId\":\"" + productId + "\"}");
+
+        assertEquals(1, payload.size());
+        assertEquals(productId,
+                mapper.treeToValue(payload, ProductDeactivatedEvent.class).productId());
     }
 }
