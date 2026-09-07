@@ -1,5 +1,7 @@
 package dev.erkut.productservice.product.application;
 
+import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.outbox.application.OutboxService;
 import dev.erkut.productservice.product.api.request.ProductBulkRequest;
 import dev.erkut.productservice.product.api.request.ProductCreateRequest;
 import dev.erkut.productservice.product.api.response.ProductResponse;
@@ -26,15 +28,23 @@ import java.util.stream.Collectors;
 public class ProductService {
 
     private final ProductRepository productRepository;
-
-    public ProductService(ProductRepository productRepository) {
+    private final OutboxService outboxService;
+    public ProductService(
+            ProductRepository productRepository,
+            OutboxService outboxService
+    ) {
         this.productRepository = productRepository;
+        this.outboxService = outboxService;
     }
 
     @Transactional
     public ProductResponse createProduct(ProductCreateRequest req) {
-        Product product = Product.create(req.name(), req.price(), Instant.now());
+        Instant now = Instant.now();
+        Product product = Product.create(req.name(), req.price(), now);
         Product savedProduct = productRepository.save(product);
+
+        ProductCreatedEvent event = new ProductCreatedEvent(savedProduct.getId());
+        outboxService.createProductCreatedEvent(event, now);
         return ProductMapper.toResponse(savedProduct);
     }
 

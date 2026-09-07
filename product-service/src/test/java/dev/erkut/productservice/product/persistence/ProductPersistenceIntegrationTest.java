@@ -4,7 +4,13 @@ import dev.erkut.productservice.product.api.request.ProductCreateRequest;
 import dev.erkut.productservice.product.domain.Product;
 import dev.erkut.productservice.product.domain.ProductStatus;
 import dev.erkut.productservice.product.application.ProductService;
+import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.outbox.domain.OutboxMessage;
+import dev.erkut.productservice.outbox.domain.OutboxMessageType;
+import dev.erkut.productservice.outbox.domain.OutboxStatus;
+import dev.erkut.productservice.outbox.persistence.OutboxMessageRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +25,7 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 @SpringBootTest
 @Transactional
@@ -27,6 +34,8 @@ class ProductPersistenceIntegrationTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-09-05T12:30:15.123456Z");
     private static final Instant UPDATED_AT = Instant.parse("2026-09-05T12:30:16.654321Z");
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     @Container
     @ServiceConnection
@@ -38,6 +47,9 @@ class ProductPersistenceIntegrationTest {
 
     @Autowired
     private ProductRepository productRepository;
+
+    @Autowired
+    private OutboxMessageRepository outboxMessageRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -55,6 +67,37 @@ class ProductPersistenceIntegrationTest {
         assertEquals("Persistence Product", reloaded.getName());
         assertEquals(new BigDecimal("25.50"), reloaded.getPrice());
         assertEquals(ProductStatus.ACTIVE, reloaded.getStatus());
+    }
+
+    @Test
+    void productCreationPersistsPendingOutboxWithStableIdentityAndPayload() throws Exception {
+        System.out.println(
+                "JSON MAPPER = " +
+                        entityManagerFactory.getProperties()
+                                .get("hibernate.type.json_format_mapper")
+        );
+        var created = productService.createProduct(
+                new ProductCreateRequest("Outbox Product", new BigDecimal("15.00")));
+        productRepository.flush();
+
+        OutboxMessage outbox = outboxMessageRepository
+                .findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
+                .stream()
+                .filter(message -> message.getAggregateId().equals(created.productId()))
+                .findFirst()
+                .orElseThrow();
+
+        assertNotNull(outbox.getId());
+        assertNotNull(outbox.getPayload());
+        assertNotEquals(created.productId(), outbox.getId());
+        assertEquals(created.productId(), outbox.getAggregateId());
+        assertEquals(OutboxMessageType.PRODUCT_CREATED_EVENT, outbox.getMessageType());
+        assertEquals(OutboxStatus.PENDING, outbox.getStatus());
+        assertNotNull(outbox.getCreatedAt());
+        assertEquals(created.productId(),
+                new tools.jackson.databind.json.JsonMapper()
+                        .treeToValue(outbox.getPayload(), ProductCreatedEvent.class)
+                        .productId());
     }
 
     @Test

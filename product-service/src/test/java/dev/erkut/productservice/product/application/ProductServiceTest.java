@@ -1,5 +1,7 @@
 package dev.erkut.productservice.product.application;
 
+import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.outbox.application.OutboxService;
 import dev.erkut.productservice.product.api.request.ProductCreateRequest;
 import dev.erkut.productservice.product.api.response.ProductResponse;
 import dev.erkut.productservice.product.api.request.ProductUpdateRequest;
@@ -21,6 +23,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,13 +43,20 @@ class ProductServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private OutboxService outboxService;
+
     private ProductService productService() {
-        return new ProductService(productRepository);
+        return new ProductService(productRepository, outboxService);
     }
 
     @Test
     void createProductCreatesSavesAndMapsProduct() {
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+            Product product = invocation.getArgument(0);
+            setField(product, "id", PRODUCT_ID);
+            return product;
+        });
 
         ProductResponse response = productService().createProduct(
                 new ProductCreateRequest("Keyboard", new BigDecimal("99.90")));
@@ -56,6 +66,8 @@ class ProductServiceTest {
         assertEquals(ProductStatus.ACTIVE, response.status());
         assertEquals(response.createdAt(), response.updatedAt());
         verify(productRepository).save(any(Product.class));
+        verify(outboxService).createProductCreatedEvent(
+                new ProductCreatedEvent(PRODUCT_ID), response.createdAt());
     }
 
     @Test
@@ -183,5 +195,15 @@ class ProductServiceTest {
 
     private static Product product(String name, BigDecimal price) {
         return Product.create(name, price, CREATED_AT);
+    }
+
+    private static void setField(Object target, String fieldName, Object value) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 }

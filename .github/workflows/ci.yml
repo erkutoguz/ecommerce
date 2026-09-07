@@ -22,6 +22,7 @@ jobs:
           - order-service
           - product-service
           - order-workflow-service
+          - stock-service
 
     name: Test ${{ matrix.service }}
 
