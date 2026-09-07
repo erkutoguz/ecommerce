@@ -11,6 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -63,6 +66,11 @@ public class StockService {
                 );
 
         item.deactivate();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<StockItem> findStockItemById(UUID productId) {
+        return itemRepository.findById(productId);
     }
 
     private boolean isDuplicate(
