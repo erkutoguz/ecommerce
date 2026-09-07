@@ -63,6 +63,10 @@ public class StockItem {
         return reservedQuantity;
     }
 
+    public void deactivate() {
+        this.active = false;
+    }
+
     public boolean isActive() {
         return active;
     }

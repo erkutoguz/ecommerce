@@ -1,12 +1,15 @@
 package dev.erkut.stockservice.messaging.kafka.consumer;
 
 import dev.erkut.stockservice.message.MessageEnvelope;
+import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.stockservice.message.event.ProductEventType;
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
+import dev.erkut.stockservice.message.exception.MessageDeserializationException;
 import dev.erkut.stockservice.stock.application.StockService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @Component
@@ -32,21 +35,22 @@ public class ProductEventsListener {
         }
 
         switch (eventType) {
-            case PRODUCT_CREATED -> {
-                ProductCreatedEvent event = deserializeProductCreated(envelope);
+            case PRODUCT_CREATED_EVENT -> {
+                ProductCreatedEvent event = deserialize(envelope.payload(), ProductCreatedEvent.class);
                 stockService.handleProductCreated(envelope, event);
+            }
+            case PRODUCT_DEACTIVATED_EVENT -> {
+                ProductDeactivatedEvent event = deserialize(envelope.payload(), ProductDeactivatedEvent.class);
+                stockService.handleProductDeactivated(envelope, event);
             }
         }
     }
 
-    private ProductCreatedEvent deserializeProductCreated(MessageEnvelope envelope) {
+    private <T> T deserialize(JsonNode payload, Class<T> type) {
         try {
-            return jsonMapper.treeToValue(
-                    envelope.payload(),
-                    ProductCreatedEvent.class
-            );
+            return jsonMapper.treeToValue(payload, type);
         } catch (JacksonException exception) {
-            throw new IllegalArgumentException("Invalid PRODUCT_CREATED payload", exception);
+            throw new MessageDeserializationException("Message payload could not be deserialized", exception);
         }
     }
 

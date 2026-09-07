@@ -1,7 +1,8 @@
 package dev.erkut.stockservice.message.event;
 
 public enum ProductEventType {
-    PRODUCT_CREATED;
+    PRODUCT_CREATED_EVENT,
+    PRODUCT_DEACTIVATED_EVENT;
 
     public static ProductEventType from(String s) {
         if (s == null) {

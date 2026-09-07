@@ -12,7 +12,7 @@ CREATE TABLE outbox_messages
         CHECK (status IN ('PENDING', 'PUBLISHED')),
 
     CONSTRAINT chk_outbox_message_type
-        CHECK (message_type IN ('PRODUCT_CREATED_EVENT'))
+        CHECK (message_type IN ('PRODUCT_CREATED_EVENT', 'PRODUCT_DEACTIVATED_EVENT'))
 );
 
 CREATE INDEX idx_outbox_status_created_at

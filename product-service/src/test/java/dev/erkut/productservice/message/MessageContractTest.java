@@ -1,6 +1,7 @@
 package dev.erkut.productservice.message;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -23,6 +24,15 @@ class MessageContractTest {
         assertEquals(PRODUCT_ID.toString(), payload.get("productId").asText());
         assertEquals(PRODUCT_ID,
                 mapper.treeToValue(payload, ProductCreatedEvent.class).productId());
+    }
+
+    @Test
+    void productDeactivatedEventUsesCanonicalWireShape() throws Exception {
+        JsonMapper mapper = new JsonMapper();
+        var payload = mapper.valueToTree(new ProductDeactivatedEvent(PRODUCT_ID));
+
+        assertEquals(1, payload.size());
+        assertEquals(PRODUCT_ID.toString(), payload.get("productId").asText());
     }
 
     @Test
