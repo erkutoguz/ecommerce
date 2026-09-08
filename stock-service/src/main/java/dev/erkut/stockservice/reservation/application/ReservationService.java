@@ -38,9 +38,7 @@ public class ReservationService {
 
     @Transactional
     public void handleReserveStock(MessageEnvelope envelope, ReserveStockCommand command) {
-        if(command == null) {
-            throw new IllegalArgumentException("Reserve stock command cannot be null");
-        }
+        validateCommand(command);
 
         Instant now = Instant.now();
 
@@ -115,5 +113,35 @@ public class ReservationService {
                 orderId,
                 now
         );
+    }
+
+    private void validateCommand(ReserveStockCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("Reserve stock command cannot be null");
+        }
+        if (command.orderId() == null) {
+            throw new IllegalArgumentException("Order id cannot be null");
+        }
+        if (command.items() == null || command.items().isEmpty()) {
+            throw new IllegalArgumentException("Reserve stock items cannot be null or empty");
+        }
+
+        Set<UUID> productIds = new HashSet<>();
+        for (ReserveStockCommand.ReserveStockItem item : command.items()) {
+            if (item == null) {
+                throw new IllegalArgumentException("Reserve stock item cannot be null");
+            }
+            if (item.productId() == null) {
+                throw new IllegalArgumentException("Product id cannot be null");
+            }
+            if (item.quantity() <= 0) {
+                throw new IllegalArgumentException("Quantity must be greater than zero");
+            }
+            if (!productIds.add(item.productId())) {
+                throw new IllegalArgumentException(
+                        "Product already exists in reserve stock command: " + item.productId()
+                );
+            }
+        }
     }
 }

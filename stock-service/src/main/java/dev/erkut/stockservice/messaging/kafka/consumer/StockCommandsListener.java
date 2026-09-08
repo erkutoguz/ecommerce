@@ -4,10 +4,8 @@ import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.message.command.ReserveStockCommand;
 import dev.erkut.stockservice.message.command.StockCommandType;
 import dev.erkut.stockservice.reservation.application.ReservationService;
-import dev.erkut.stockservice.stock.application.StockService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.JacksonException;
 
 @Component
 public class StockCommandsListener {
@@ -26,12 +24,12 @@ public class StockCommandsListener {
             topics = "${kafka.topic.stock-commands}",
             groupId = "${spring.kafka.consumer.group-id}"
     )
-    public void listenStockCommand(MessageEnvelope envelope) throws JacksonException {
+    public void listenStockCommand(MessageEnvelope envelope) {
         consumerUtil.validateEnvelope(envelope);
 
         StockCommandType commandType = StockCommandType.from(envelope.messageType());
         if (commandType == null) {
-            return;
+            throw new IllegalArgumentException("Unsupported stock command type: " + envelope.messageType());
         }
 
         switch (commandType) {

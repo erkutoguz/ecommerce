@@ -7,7 +7,6 @@ import dev.erkut.stockservice.message.event.ProductCreatedEvent;
 import dev.erkut.stockservice.stock.application.StockService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import tools.jackson.core.JacksonException;
 
 @Component
 public class ProductEventsListener {
@@ -26,7 +25,7 @@ public class ProductEventsListener {
             topics = "${kafka.topic.product-events}",
             groupId = "${spring.kafka.consumer.group-id}"
     )
-    public void listenProductEvent(MessageEnvelope envelope) throws JacksonException {
+    public void listenProductEvent(MessageEnvelope envelope) {
         consumerUtil.validateEnvelope(envelope);
 
         ProductEventType eventType = ProductEventType.from(envelope.messageType());

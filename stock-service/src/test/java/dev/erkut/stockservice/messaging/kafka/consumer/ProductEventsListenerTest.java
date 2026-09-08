@@ -34,16 +34,13 @@ class ProductEventsListenerTest {
     @Mock
     private StockService stockService;
 
-    @Mock
-    private ConsumerUtil consumerUtil;
-
     private JsonMapper jsonMapper;
     private ProductEventsListener listener;
 
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new ProductEventsListener(stockService, consumerUtil);
+        listener = new ProductEventsListener(stockService, new ConsumerUtil(jsonMapper));
     }
 
     @Test

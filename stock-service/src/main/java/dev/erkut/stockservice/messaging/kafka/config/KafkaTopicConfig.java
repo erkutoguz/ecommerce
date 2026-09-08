@@ -23,4 +23,21 @@ public class KafkaTopicConfig {
                 .partitions(3)
                 .build();
     }
+
+    @Bean
+    public NewTopic stockCommandsDltTopic() {
+        return TopicBuilder
+                .name(topics.stockCommandsDlt())
+                .partitions(3)
+                .build();
+    }
+
+    @Bean
+    public NewTopic productEventsDltTopic() {
+        return TopicBuilder
+                .name(topics.productEventsDlt())
+                .partitions(3)
+                .build();
+    }
 }
+

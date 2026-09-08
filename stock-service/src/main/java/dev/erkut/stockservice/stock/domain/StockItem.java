@@ -15,6 +15,10 @@ public class StockItem {
     @Column(name = "product_id")
     private UUID productId;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     @Column(name = "on_hand_quantity", nullable = false)
     private int onHandQuantity;
 
@@ -70,18 +74,18 @@ public class StockItem {
     }
 
     public void validateReservation(int quantity) {
-        if(quantity >= 0) {
+        if (quantity <= 0) {
             throw new IllegalStateException("Quantity must be greater than zero");
-        }
-
-        int availableQuantity = onHandQuantity - reservedQuantity;
-
-        if(availableQuantity < quantity) {
-            throw new InsufficientStockException("Insufficient stock", productId);
         }
 
         if (!active) {
             throw new InactiveStockItemException("Item is not active", productId);
+        }
+
+        int availableQuantity = onHandQuantity - reservedQuantity;
+
+        if (availableQuantity < quantity) {
+            throw new InsufficientStockException("Insufficient stock", productId);
         }
     }
 
