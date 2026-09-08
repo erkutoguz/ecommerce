@@ -78,8 +78,8 @@ class MessageContractTest {
         JsonNode payload = new JsonMapper().valueToTree(command);
 
         assertEquals(2, payload.size());
-        assertEquals(ORDER_ID.toString(), payload.get("orderId").asText());
-        assertEquals(PRODUCT_ID.toString(), payload.get("items").get(0).get("productId").asText());
+        assertEquals(ORDER_ID.toString(), payload.get("orderId").asString());
+        assertEquals(PRODUCT_ID.toString(), payload.get("items").get(0).get("productId").asString());
         assertEquals(2, payload.get("items").get(0).get("quantity").asInt());
     }
 }

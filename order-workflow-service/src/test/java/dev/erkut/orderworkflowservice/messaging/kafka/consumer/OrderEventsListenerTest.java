@@ -41,11 +41,11 @@ class OrderEventsListenerTest {
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new OrderEventsListener(jsonMapper, orderSagaService);
+        listener = new OrderEventsListener(orderSagaService, new ConsumerUtil(jsonMapper));
     }
 
     @Test
-    void listenOrder_orderCheckoutStarted_shouldDeserializeAndDelegate() throws Exception {
+    void handleOrderEvents_orderCheckoutStarted_shouldDeserializeAndDelegate() throws Exception {
         OrderCheckoutStartedEvent expectedEvent = event();
         MessageEnvelope envelope = envelope(
                 OrderCheckoutStartedEvent.MESSAGE_TYPE,
@@ -54,20 +54,20 @@ class OrderEventsListenerTest {
         ArgumentCaptor<OrderCheckoutStartedEvent> eventCaptor =
                 ArgumentCaptor.forClass(OrderCheckoutStartedEvent.class);
 
-        listener.listenOrder(envelope);
+        listener.handleOrderEvents(envelope);
 
         verify(orderSagaService).handleOrderCheckoutStarted(eq(envelope), eventCaptor.capture());
         assertEquals(expectedEvent, eventCaptor.getValue());
     }
 
     @Test
-    void listenOrder_unrelatedValidMessageType_shouldIgnore() throws Exception {
+    void handleOrderEvents_unsupportedMessageType_shouldRejectMessage() {
         MessageEnvelope envelope = envelope(
                 "SOME_OTHER_EVENT",
                 jsonMapper.createObjectNode()
         );
 
-        listener.listenOrder(envelope);
+        assertThrows(IllegalArgumentException.class, () -> listener.handleOrderEvents(envelope));
 
         verify(orderSagaService, never()).handleOrderCheckoutStarted(
                 org.mockito.ArgumentMatchers.any(),
@@ -76,10 +76,10 @@ class OrderEventsListenerTest {
     }
 
     @Test
-    void listenOrder_missingPayload_shouldRejectMalformedEnvelope() {
+    void handleOrderEvents_missingPayload_shouldRejectMalformedEnvelope() {
         MessageEnvelope envelope = envelope(OrderCheckoutStartedEvent.MESSAGE_TYPE, null);
 
-        assertThrows(IllegalArgumentException.class, () -> listener.listenOrder(envelope));
+        assertThrows(IllegalArgumentException.class, () -> listener.handleOrderEvents(envelope));
         verify(orderSagaService, never()).handleOrderCheckoutStarted(
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()

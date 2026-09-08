@@ -1,15 +1,16 @@
 package dev.erkut.orderworkflowservice.message.event;
 
-public enum OrderEventType {
-    ORDER_CHECKOUT_STARTED;
+public enum StockEventType {
+    STOCK_RESERVED_EVENT,
+    STOCK_RESERVATION_FAILED_EVENT;
 
-    public static OrderEventType from(String s) {
+    public static StockEventType from(String s) {
         if (s == null) {
             return null;
         }
 
         try {
-            return OrderEventType.valueOf(s.trim().toUpperCase());
+            return StockEventType.valueOf(s.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             return null;
         }

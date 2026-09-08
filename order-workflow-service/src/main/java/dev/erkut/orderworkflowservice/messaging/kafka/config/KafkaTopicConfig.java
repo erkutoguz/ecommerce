@@ -23,4 +23,36 @@ public class KafkaTopicConfig {
                 .partitions(3)
                 .build();
     }
+
+    @Bean
+    public NewTopic orderCommandsTopic() {
+        return TopicBuilder
+                .name(topics.orderCommands())
+                .partitions(3)
+                .build();
+    }
+
+    @Bean
+    public NewTopic paymentCommandsTopic() {
+        return TopicBuilder
+                .name(topics.paymentCommands())
+                .partitions(3)
+                .build();
+    }
+
+    @Bean
+    public NewTopic orderEventsDltTopic() {
+        return TopicBuilder
+                .name(topics.orderEventsDlt())
+                .partitions(3)
+                .build();
+    }
+
+    @Bean
+    public NewTopic stockEventsDltTopic() {
+        return TopicBuilder
+                .name(topics.stockEventsDlt())
+                .partitions(3)
+                .build();
+    }
 }
