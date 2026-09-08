@@ -61,11 +61,11 @@ public class OutboxService {
         message.markPublished(publishedAt);
     }
 
-    private JsonNode serialize(ReserveStockCommand command) {
+    private JsonNode serialize(Object command) {
         try {
             return jsonMapper.valueToTree(command);
         } catch (JacksonException exception) {
-            throw new OutboxSerializationException("Reserve stock command could not be serialized", exception);
+            throw new OutboxSerializationException("Command could not be serialized", exception);
         }
     }
 }

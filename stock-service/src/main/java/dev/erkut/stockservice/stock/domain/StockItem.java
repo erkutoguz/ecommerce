@@ -1,5 +1,7 @@
 package dev.erkut.stockservice.stock.domain;
 
+import dev.erkut.stockservice.stock.domain.exception.InactiveStockItemException;
+import dev.erkut.stockservice.stock.domain.exception.InsufficientStockException;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -12,6 +14,10 @@ public class StockItem {
     @Id
     @Column(name = "product_id")
     private UUID productId;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
 
     @Column(name = "on_hand_quantity", nullable = false)
     private int onHandQuantity;
@@ -65,6 +71,27 @@ public class StockItem {
 
     public void deactivate() {
         this.active = false;
+    }
+
+    public void validateReservation(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalStateException("Quantity must be greater than zero");
+        }
+
+        if (!active) {
+            throw new InactiveStockItemException("Item is not active", productId);
+        }
+
+        int availableQuantity = onHandQuantity - reservedQuantity;
+
+        if (availableQuantity < quantity) {
+            throw new InsufficientStockException("Insufficient stock", productId);
+        }
+    }
+
+    public void reserve(int quantity) {
+        validateReservation(quantity);
+        reservedQuantity += quantity;
     }
 
     public boolean isActive() {

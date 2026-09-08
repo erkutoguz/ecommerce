@@ -40,7 +40,7 @@ class ProductEventsListenerTest {
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new ProductEventsListener(stockService, jsonMapper);
+        listener = new ProductEventsListener(stockService, new ConsumerUtil(jsonMapper));
     }
 
     @Test
