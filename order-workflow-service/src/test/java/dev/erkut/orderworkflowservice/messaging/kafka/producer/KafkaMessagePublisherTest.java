@@ -24,7 +24,7 @@ class KafkaMessagePublisherTest {
     private static final UUID ORDER_ID = UUID.fromString("80000000-0000-0000-0000-000000000001");
 
     @Mock
-    private KafkaTemplate<String, MessageEnvelope> kafkaTemplate;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Test
     void publish_shouldUseAggregateIdAsKafkaKeyAndReturnTemplateFuture() {
@@ -34,7 +34,7 @@ class KafkaMessagePublisherTest {
                 Instant.parse("2026-01-01T10:00:00Z"),
                 new JsonMapper().createObjectNode()
         );
-        CompletableFuture<SendResult<String, MessageEnvelope>> expected = new CompletableFuture<>();
+        CompletableFuture<SendResult<String, Object>> expected = new CompletableFuture<>();
         KafkaMessagePublisher publisher = new KafkaMessagePublisher(kafkaTemplate);
         when(kafkaTemplate.send(TOPIC, ORDER_ID.toString(), envelope)).thenReturn(expected);
 

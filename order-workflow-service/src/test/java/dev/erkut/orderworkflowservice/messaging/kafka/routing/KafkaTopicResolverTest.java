@@ -3,17 +3,42 @@ package dev.erkut.orderworkflowservice.messaging.kafka.routing;
 import dev.erkut.orderworkflowservice.messaging.kafka.config.KafkaTopicsProperties;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class KafkaTopicResolverTest {
 
-    @Test
-    void resolve_reserveStockCommand_shouldReturnStockCommandsTopic() {
-        KafkaTopicResolver resolver = new KafkaTopicResolver(
-                new KafkaTopicsProperties("order.events", "stock.commands")
-        );
+    private final KafkaTopicsProperties topics = new KafkaTopicsProperties(
+            "order.events",
+            "stock.commands",
+            "stock.events",
+            "payment.commands",
+            "order.commands",
+            "order.events.DLT",
+            "stock.events.DLT"
+    );
 
-        assertEquals("stock.commands", resolver.resolve(OutboxMessageType.RESERVE_STOCK_COMMAND));
+    @ParameterizedTest
+    @MethodSource("commandTopics")
+    void resolve_shouldRouteEachCommandToItsOwnedTopic(
+            OutboxMessageType messageType,
+            String expectedTopic
+    ) {
+        KafkaTopicResolver resolver = new KafkaTopicResolver(topics);
+
+        assertEquals(expectedTopic, resolver.resolve(messageType));
+    }
+
+    private static Stream<Arguments> commandTopics() {
+        return Stream.of(
+                Arguments.of(OutboxMessageType.RESERVE_STOCK_COMMAND, "stock.commands"),
+                Arguments.of(OutboxMessageType.REJECT_ORDER_COMMAND, "order.commands"),
+                Arguments.of(OutboxMessageType.PROCESS_PAYMENT_COMMAND, "payment.commands")
+        );
     }
 }

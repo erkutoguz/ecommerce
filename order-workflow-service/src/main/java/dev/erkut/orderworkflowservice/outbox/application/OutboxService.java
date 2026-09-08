@@ -1,5 +1,7 @@
 package dev.erkut.orderworkflowservice.outbox.application;
 
+import dev.erkut.orderworkflowservice.message.command.ProcessPaymentCommand;
+import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
 import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
 import dev.erkut.orderworkflowservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
@@ -41,6 +43,38 @@ public class OutboxService {
                 createdAt
         );
 
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void createRejectOrderCommand(RejectOrderCommand command, Instant createdAt) {
+        if (command == null) {
+            throw new IllegalArgumentException("Reject order command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.REJECT_ORDER_COMMAND,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void handleProcessPaymentCommand(ProcessPaymentCommand command, Instant createdAt) {
+        if(command == null) {
+            throw new IllegalArgumentException("Process payment command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.PROCESS_PAYMENT_COMMAND,
+                payload,
+                createdAt
+        );
         outboxRepository.save(message);
     }
 

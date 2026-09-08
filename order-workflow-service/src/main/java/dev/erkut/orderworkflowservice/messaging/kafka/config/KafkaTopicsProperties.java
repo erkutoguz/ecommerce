@@ -5,5 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "kafka.topic")
 public record KafkaTopicsProperties(
         String orderEvents,
-        String stockCommands
+        String stockCommands,
+        String stockEvents,
+        String paymentCommands,
+        String orderCommands,
+        String orderEventsDlt,
+        String stockEventsDlt
 ) {}
