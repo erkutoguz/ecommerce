@@ -109,6 +109,15 @@ public class OrderSaga {
         this.updatedAt = updatedAt;
     }
 
+    public void markFailed(Instant updatedAt) {
+        if (state != OrderSagaState.ORDER_REJECTION_PENDING) {
+            throw new IllegalOrderSagaStateException("Order saga cannot be marked as failed from state: " + state);
+        }
+
+        state = OrderSagaState.FAILED;
+        this.updatedAt = updatedAt;
+    }
+
     public UUID getOrderId() {
         return orderId;
     }

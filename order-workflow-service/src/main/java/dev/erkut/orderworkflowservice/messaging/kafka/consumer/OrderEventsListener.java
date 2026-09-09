@@ -3,6 +3,7 @@ package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.event.OrderEventType;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -36,6 +37,14 @@ public class OrderEventsListener {
                 OrderCheckoutStartedEvent event =
                         consumerUtil.deserialize(envelope.payload(), OrderCheckoutStartedEvent.class);
                 sagaService.handleOrderCheckoutStarted(
+                        envelope,
+                        event
+                );
+            }
+            case ORDER_REJECTED_EVENT -> {
+                OrderRejectedEvent event =
+                        consumerUtil.deserialize(envelope.payload(), OrderRejectedEvent.class);
+                sagaService.handleOrderRejectedEvent(
                         envelope,
                         event
                 );
