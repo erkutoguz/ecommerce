@@ -20,7 +20,7 @@ public class KafkaTopicResolver {
                     topics.stockCommands();
             case REJECT_ORDER_COMMAND ->
                     topics.orderCommands();
-            case PROCESS_PAYMENT_COMMAND ->
+            case INITIATE_PAYMENT_COMMAND ->
                     topics.paymentCommands();
         };
     }

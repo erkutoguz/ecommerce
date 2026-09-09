@@ -61,6 +61,8 @@ services:
   customer-service:
     build:
       context: ./customer-service
+    ports:
+      - "4001:4001"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://customer-db:5432/customer
       SPRING_DATASOURCE_USERNAME: customer
@@ -89,6 +91,8 @@ services:
   order-service:
     build:
       context: ./order-service
+    ports:
+      - "4000:4000"
     environment:
       CUSTOMER_SERVICE_URL: http://customer-service:4001/customers
       PRODUCT_SERVICE_URL: http://product-service:4003/products
@@ -126,6 +130,8 @@ services:
   product-service:
     build:
       context: ./product-service
+    ports:
+      - "4003:4003"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://product-db:5432/product
       SPRING_DATASOURCE_USERNAME: product
@@ -188,6 +194,8 @@ services:
   stock-service:
     build:
       context: ./stock-service
+    ports:
+      - "4006:4006"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://stock-db:5432/stock
       SPRING_DATASOURCE_USERNAME: stock
@@ -216,6 +224,42 @@ services:
     networks:
       - stock-db-network
 
+  payment-service:
+    build:
+      context: ./payment-service
+    ports:
+      - "4007:4007"
+    env_file:
+      - ./payment-service/.env.local
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://payment-db:5432/payment
+      SPRING_DATASOURCE_USERNAME: payment
+      SPRING_DATASOURCE_PASSWORD: payment-pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - app-network
+      - payment-db-network
+
+  payment-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: payment
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment-pass
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U payment -d payment" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - payment-db-network
+
+
 networks:
   app-network:
 
@@ -232,4 +276,7 @@ networks:
     internal: true
 
   stock-db-network:
+    internal: true
+
+  payment-db-network:
     internal: true

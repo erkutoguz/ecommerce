@@ -4,7 +4,7 @@ import dev.erkut.orderworkflowservice.TestcontainersConfiguration;
 import dev.erkut.orderworkflowservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.command.OrderRejectionReason;
-import dev.erkut.orderworkflowservice.message.command.ProcessPaymentCommand;
+import dev.erkut.orderworkflowservice.message.command.InitiatePaymentCommand;
 import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
 import dev.erkut.orderworkflowservice.message.event.StockReservedEvent;
 import dev.erkut.orderworkflowservice.message.event.StockReservationFailedEvent;
@@ -120,14 +120,14 @@ class OrderSagaStockFailureIntegrationTest {
 
         OrderSaga updatedSaga = orderSagaRepository.findById(ORDER_ID).orElseThrow();
         OutboxMessage outbox = outboxRepository.findAll().getFirst();
-        ProcessPaymentCommand command = jsonMapper.treeToValue(
+        InitiatePaymentCommand command = jsonMapper.treeToValue(
                 outbox.getPayload(),
-                ProcessPaymentCommand.class
+                InitiatePaymentCommand.class
         );
         assertEquals(1, inboxRepository.count());
         assertEquals(OrderSagaState.PAYMENT_PENDING, updatedSaga.getState());
         assertNotEquals(OCCURRED_AT, updatedSaga.getUpdatedAt());
-        assertEquals(OutboxMessageType.PROCESS_PAYMENT_COMMAND, outbox.getMessageType());
+        assertEquals(OutboxMessageType.INITIATE_PAYMENT_COMMAND, outbox.getMessageType());
         assertEquals(ORDER_ID, outbox.getAggregateId());
         assertEquals(OutboxStatus.PENDING, outbox.getStatus());
         assertEquals(ORDER_ID, command.orderId());

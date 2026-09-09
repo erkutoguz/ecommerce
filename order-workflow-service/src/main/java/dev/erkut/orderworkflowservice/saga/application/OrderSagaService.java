@@ -3,7 +3,7 @@ package dev.erkut.orderworkflowservice.saga.application;
 import dev.erkut.orderworkflowservice.inbox.application.InboxService;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.command.OrderRejectionReason;
-import dev.erkut.orderworkflowservice.message.command.ProcessPaymentCommand;
+import dev.erkut.orderworkflowservice.message.command.InitiatePaymentCommand;
 import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
 import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
@@ -136,14 +136,14 @@ public class OrderSagaService {
                 .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
 
         orderSaga.markPaymentPending(now);
-        ProcessPaymentCommand command =
-                new ProcessPaymentCommand(
+        InitiatePaymentCommand command =
+                new InitiatePaymentCommand(
                         orderSaga.getOrderId(),
                         orderSaga.getTotalAmount(),
                         CurrencyMapper.toCommand(orderSaga.getCurrency())
                 );
 
-        outboxService.handleProcessPaymentCommand(command, now);
+        outboxService.handleInitiatePaymentCommand(command, now);
 
     }
 

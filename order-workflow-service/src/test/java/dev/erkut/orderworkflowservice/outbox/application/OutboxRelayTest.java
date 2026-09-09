@@ -121,7 +121,7 @@ class OutboxRelayTest {
         return Stream.of(
                 Arguments.of(OutboxMessageType.RESERVE_STOCK_COMMAND, "stock.commands"),
                 Arguments.of(OutboxMessageType.REJECT_ORDER_COMMAND, "order.commands"),
-                Arguments.of(OutboxMessageType.PROCESS_PAYMENT_COMMAND, "payment.commands")
+                Arguments.of(OutboxMessageType.INITIATE_PAYMENT_COMMAND, "payment.commands")
         );
     }
 }
