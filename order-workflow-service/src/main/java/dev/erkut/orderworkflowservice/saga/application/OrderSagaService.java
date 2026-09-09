@@ -7,6 +7,7 @@ import dev.erkut.orderworkflowservice.message.command.ProcessPaymentCommand;
 import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
 import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderworkflowservice.message.event.StockReservationFailedEvent;
 import dev.erkut.orderworkflowservice.message.event.StockReservedEvent;
 import dev.erkut.orderworkflowservice.outbox.application.OutboxService;
@@ -146,12 +147,38 @@ public class OrderSagaService {
 
     }
 
+    @Transactional
+    public void handleOrderRejectedEvent(MessageEnvelope envelope, OrderRejectedEvent event) {
+        validateOrderEvent(envelope, event);
+
+        Instant now = Instant.now();
+
+        if(isDuplicate(envelope, event.orderId(), now)) {
+            return;
+        }
+
+        OrderSaga orderSaga = orderSagaRepository.findById(event.orderId())
+                .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
+
+        orderSaga.markFailed(now);
+    }
+
     private void validateStockEvent(MessageEnvelope envelope, Object event) {
         if (envelope == null) {
             throw new IllegalArgumentException("Message envelope cannot be null");
         }
         if (event == null) {
             throw new IllegalArgumentException("Stock event cannot be null");
+        }
+
+    }
+
+    private void validateOrderEvent(MessageEnvelope envelope, Object event) {
+        if (envelope == null) {
+            throw new IllegalArgumentException("Message envelope cannot be null");
+        }
+        if (event == null) {
+            throw new IllegalArgumentException("Order event cannot be null");
         }
 
     }
@@ -168,4 +195,6 @@ public class OrderSagaService {
                 now
         );
     }
+
+
 }

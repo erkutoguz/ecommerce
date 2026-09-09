@@ -3,6 +3,7 @@ package dev.erkut.orderworkflowservice.message;
 import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
 import dev.erkut.orderworkflowservice.message.event.Currency;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -66,6 +67,22 @@ class MessageContractTest {
                 List.of(new OrderCheckoutStartedEvent.OrderCheckoutItem(PRODUCT_ID, 2)),
                 event.items()
         );
+    }
+
+    @Test
+    void orderRejectedEvent_shouldRoundTripCanonicalWireShape() throws Exception {
+        JsonMapper jsonMapper = new JsonMapper();
+        OrderRejectedEvent expectedEvent = new OrderRejectedEvent(ORDER_ID);
+
+        JsonNode payload = jsonMapper.valueToTree(expectedEvent);
+        OrderRejectedEvent deserializedEvent = jsonMapper.treeToValue(
+                payload,
+                OrderRejectedEvent.class
+        );
+
+        assertEquals(1, payload.size());
+        assertEquals(ORDER_ID.toString(), payload.get("orderId").asString());
+        assertEquals(expectedEvent, deserializedEvent);
     }
 
     @Test

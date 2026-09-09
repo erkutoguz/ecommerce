@@ -1,7 +1,8 @@
 package dev.erkut.orderworkflowservice.message.event;
 
 public enum OrderEventType {
-    ORDER_CHECKOUT_STARTED;
+    ORDER_CHECKOUT_STARTED,
+    ORDER_REJECTED_EVENT;
 
     public static OrderEventType from(String s) {
         if (s == null) {
