@@ -1,7 +1,10 @@
 package dev.erkut.orderservice.message;
 
 import dev.erkut.orderservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderservice.message.command.RejectOrderCommand;
+import dev.erkut.orderservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderservice.order.domain.Currency;
+import dev.erkut.orderservice.order.domain.OrderRejectionReason;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -55,5 +58,36 @@ class MessageContractTest {
         assertEquals(1, payload.get("items").size());
         assertEquals(PRODUCT_ID.toString(), payload.get("items").get(0).get("productId").asText());
         assertEquals(2, payload.get("items").get(0).get("quantity").asInt());
+    }
+
+    @Test
+    void rejectionCommandAndEvent_shouldKeepCanonicalWireShapesAndEnumVocabulary() throws Exception {
+        JsonMapper mapper = new JsonMapper();
+        RejectOrderCommand command = new RejectOrderCommand(
+                ORDER_ID,
+                OrderRejectionReason.OUT_OF_STOCK
+        );
+
+        JsonNode commandJson = mapper.valueToTree(command);
+        RejectOrderCommand deserializedCommand = mapper.treeToValue(commandJson, RejectOrderCommand.class);
+        JsonNode eventJson = mapper.valueToTree(new OrderRejectedEvent(ORDER_ID));
+        OrderRejectedEvent deserializedEvent = mapper.treeToValue(eventJson, OrderRejectedEvent.class);
+
+        assertEquals(2, commandJson.size());
+        assertEquals(ORDER_ID.toString(), commandJson.get("orderId").asText());
+        assertEquals("OUT_OF_STOCK", commandJson.get("rejectionReason").asText());
+        assertEquals(command, deserializedCommand);
+        assertEquals(1, eventJson.size());
+        assertEquals(ORDER_ID.toString(), eventJson.get("orderId").asText());
+        assertEquals(new OrderRejectedEvent(ORDER_ID), deserializedEvent);
+        assertArrayEquals(
+                new OrderRejectionReason[]{
+                        OrderRejectionReason.OUT_OF_STOCK,
+                        OrderRejectionReason.PAYMENT_DECLINED,
+                        OrderRejectionReason.USER_CANCELLED,
+                        OrderRejectionReason.RESERVATION_EXPIRED
+                },
+                OrderRejectionReason.values()
+        );
     }
 }
