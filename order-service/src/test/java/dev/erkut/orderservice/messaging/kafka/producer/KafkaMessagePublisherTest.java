@@ -25,7 +25,7 @@ class KafkaMessagePublisherTest {
     private static final JsonNode PAYLOAD = new JsonMapper().readTree("{\"orderId\":\"test\"}");
 
     @Mock
-    private KafkaTemplate<String, MessageEnvelope> kafkaTemplate;
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Test
     void publish_shouldDelegateToKafkaTemplateAndReturnSameFuture() {
@@ -35,14 +35,14 @@ class KafkaMessagePublisherTest {
                 Instant.parse("2026-01-01T10:00:00Z"),
                 PAYLOAD
         );
-        CompletableFuture<SendResult<String, MessageEnvelope>> expectedFuture =
+        CompletableFuture<SendResult<String, Object>> expectedFuture =
                 new CompletableFuture<>();
         KafkaMessagePublisher publisher = new KafkaMessagePublisher(kafkaTemplate);
 
         when(kafkaTemplate.send(TOPIC, AGGREGATE_ID.toString(), envelope))
                 .thenReturn(expectedFuture);
 
-        CompletableFuture<SendResult<String, MessageEnvelope>> actualFuture =
+        CompletableFuture<SendResult<String, Object>> actualFuture =
                 publisher.publish(TOPIC, AGGREGATE_ID, envelope);
 
         assertSame(expectedFuture, actualFuture);

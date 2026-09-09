@@ -1,5 +1,9 @@
 package dev.erkut.orderservice.order.application;
 
+import dev.erkut.orderservice.inbox.application.InboxService;
+import dev.erkut.orderservice.message.MessageEnvelope;
+import dev.erkut.orderservice.message.command.RejectOrderCommand;
+import dev.erkut.orderservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderservice.order.api.OrderMapper;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
 import dev.erkut.orderservice.order.domain.Currency;
@@ -11,6 +15,8 @@ import dev.erkut.orderservice.order.persistence.OrderRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+
+import dev.erkut.orderservice.outbox.application.OutboxService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,9 +27,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
-
-    public OrderService(OrderRepository orderRepository) {
+    private final InboxService inboxService;
+    private final OutboxService outboxService;
+    public OrderService(
+            OrderRepository orderRepository,
+            InboxService inboxService, OutboxService outboxService
+    ) {
         this.orderRepository = orderRepository;
+        this.inboxService = inboxService;
+        this.outboxService = outboxService;
     }
 
     @Transactional
@@ -36,6 +48,22 @@ public class OrderService {
     ) {
         Order order = Order.create(sourceCartId, customerId, currency, itemSnapshots, now);
         return orderRepository.save(order);
+    }
+
+    @Transactional
+    public void handleRejectOrderCommand(MessageEnvelope envelope, RejectOrderCommand command) {
+        validateOrderCommand(envelope, command);
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, command.orderId(), now)) {
+            return;
+        }
+
+        reject(command.orderId(), command.rejectionReason(), now);
+
+        OrderRejectedEvent event = new OrderRejectedEvent(command.orderId());
+        outboxService.createOrderRejectedEvent(event, now);
     }
 
     @Transactional
@@ -95,5 +123,27 @@ public class OrderService {
     private Order findOrderById(UUID orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+    }
+
+    private void validateOrderCommand(MessageEnvelope envelope, Object event) {
+        if (envelope == null) {
+            throw new IllegalArgumentException("Message envelope cannot be null");
+        }
+        if (event == null) {
+            throw new IllegalArgumentException("Order command cannot be null");
+        }
+    }
+
+    private boolean isDuplicate(
+            MessageEnvelope envelope,
+            UUID orderId,
+            Instant now
+    ) {
+        return !inboxService.tryRegister(
+                envelope.messageId(),
+                envelope.messageType(),
+                orderId,
+                now
+        );
     }
 }

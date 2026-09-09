@@ -1,0 +1,18 @@
+package dev.erkut.orderservice.message.event;
+
+public enum OrderEventType {
+    ORDER_CHECKOUT_STARTED,
+    ORDER_REJECTED_EVENT;
+
+    public static OrderEventType from(String s) {
+        if (s == null) {
+            return null;
+        }
+
+        try {
+            return OrderEventType.valueOf(s.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+}

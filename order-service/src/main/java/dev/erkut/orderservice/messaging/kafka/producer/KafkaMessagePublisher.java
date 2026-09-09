@@ -11,12 +11,12 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class KafkaMessagePublisher {
 
-    private final KafkaTemplate<String, MessageEnvelope> kafkaTemplate;
-    public KafkaMessagePublisher(KafkaTemplate<String, MessageEnvelope> kafkaTemplate) {
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    public KafkaMessagePublisher(KafkaTemplate<String, Object> kafkaTemplate) {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    public CompletableFuture<SendResult<String, MessageEnvelope>> publish(
+    public CompletableFuture<SendResult<String, Object>> publish(
             String topic,
             UUID aggregateId,
             MessageEnvelope envelope

@@ -3,6 +3,7 @@ package dev.erkut.orderservice.outbox.application;
 import dev.erkut.orderservice.message.MessageEnvelope;
 import dev.erkut.orderservice.messaging.kafka.config.KafkaTopicsProperties;
 import dev.erkut.orderservice.messaging.kafka.producer.KafkaMessagePublisher;
+import dev.erkut.orderservice.messaging.kafka.routing.KafkaTopicResolver;
 import dev.erkut.orderservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderservice.outbox.domain.OutboxStatus;
@@ -55,7 +56,11 @@ class OutboxRelayTest {
         outboxRelay = new OutboxRelay(
                 outboxService,
                 messagePublisher,
-                new KafkaTopicsProperties(TOPIC)
+                new KafkaTopicResolver(new KafkaTopicsProperties(
+                        TOPIC,
+                        "order.commands",
+                        "order.commands.DLT"
+                ))
         );
     }
 
@@ -63,7 +68,7 @@ class OutboxRelayTest {
     void relay_shouldMarkMessagePublishedWhenKafkaSendSucceeds() {
         UUID aggregateId = UUID.fromString("80000000-0000-0000-0000-000000000001");
         OutboxMessage message = pendingMessage(aggregateId, CREATED_AT, PAYLOAD);
-        CompletableFuture<SendResult<String, MessageEnvelope>> sendFuture = CompletableFuture.completedFuture(null);
+        CompletableFuture<SendResult<String, Object>> sendFuture = CompletableFuture.completedFuture(null);
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
 
         when(outboxService.findPendingMessages())
@@ -76,7 +81,7 @@ class OutboxRelayTest {
         MessageEnvelope envelope = envelopeCaptor.getValue();
         assertSame(PAYLOAD, envelope.payload());
         assertEquals(message.getId(), envelope.messageId());
-        assertEquals(OutboxMessageType.ORDER_CHECKOUT_STARTED.name(), envelope.messageType());
+        assertEquals(OutboxMessageType.ORDER_REJECTED_EVENT.name(), envelope.messageType());
         assertEquals(CREATED_AT, envelope.occurredAt());
         verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
     }
@@ -86,7 +91,7 @@ class OutboxRelayTest {
         UUID aggregateId = UUID.fromString("80000000-0000-0000-0000-000000000001");
         OutboxMessage message = pendingMessage(aggregateId, CREATED_AT, PAYLOAD);
         RuntimeException failure = new RuntimeException("Kafka unavailable");
-        CompletableFuture<SendResult<String, MessageEnvelope>> sendFuture = new CompletableFuture<>();
+        CompletableFuture<SendResult<String, Object>> sendFuture = new CompletableFuture<>();
         sendFuture.completeExceptionally(failure);
 
         when(outboxService.findPendingMessages())
@@ -122,7 +127,7 @@ class OutboxRelayTest {
                 CREATED_AT.plusSeconds(1),
                 PAYLOAD
         );
-        CompletableFuture<SendResult<String, MessageEnvelope>> sendFuture = CompletableFuture.completedFuture(null);
+        CompletableFuture<SendResult<String, Object>> sendFuture = CompletableFuture.completedFuture(null);
         ArgumentCaptor<UUID> keyCaptor = ArgumentCaptor.forClass(UUID.class);
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
 
@@ -147,7 +152,7 @@ class OutboxRelayTest {
     private static OutboxMessage pendingMessage(UUID aggregateId, Instant createdAt, JsonNode payload) {
         return OutboxMessage.create(
                 aggregateId,
-                OutboxMessageType.ORDER_CHECKOUT_STARTED,
+                OutboxMessageType.ORDER_REJECTED_EVENT,
                 payload,
                 createdAt
         );

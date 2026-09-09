@@ -23,4 +23,12 @@ public class KafkaTopicConfig {
                 .partitions(3)
                 .build();
     }
+
+    @Bean
+    public NewTopic orderCommandsDltTopic() {
+        return TopicBuilder
+                .name(topics.orderCommandsDlt())
+                .partitions(3)
+                .build();
+    }
 }
