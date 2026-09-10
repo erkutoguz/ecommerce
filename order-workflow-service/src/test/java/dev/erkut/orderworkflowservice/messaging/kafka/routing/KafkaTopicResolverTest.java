@@ -18,6 +18,8 @@ class KafkaTopicResolverTest {
             "stock.commands",
             "stock.events",
             "payment.commands",
+            "payment.events",
+            "payment.events.DLT",
             "order.commands",
             "order.events.DLT",
             "stock.events.DLT"
@@ -37,6 +39,7 @@ class KafkaTopicResolverTest {
     private static Stream<Arguments> commandTopics() {
         return Stream.of(
                 Arguments.of(OutboxMessageType.RESERVE_STOCK_COMMAND, "stock.commands"),
+                Arguments.of(OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND, "stock.commands"),
                 Arguments.of(OutboxMessageType.REJECT_ORDER_COMMAND, "order.commands"),
                 Arguments.of(OutboxMessageType.INITIATE_PAYMENT_COMMAND, "payment.commands")
         );
