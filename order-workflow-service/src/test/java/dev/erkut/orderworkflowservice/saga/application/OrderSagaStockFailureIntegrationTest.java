@@ -5,6 +5,7 @@ import dev.erkut.orderworkflowservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.command.OrderRejectionReason;
 import dev.erkut.orderworkflowservice.message.command.InitiatePaymentCommand;
+import dev.erkut.orderworkflowservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
 import dev.erkut.orderworkflowservice.message.event.StockReservedEvent;
 import dev.erkut.orderworkflowservice.message.event.StockReservationFailedEvent;
@@ -79,7 +80,10 @@ class OrderSagaStockFailureIntegrationTest {
 
         orderSagaService.handleStockReservationFailedEvent(envelope, event(envelope));
 
-        OutboxMessage outbox = outboxRepository.findAll().getFirst();
+        OutboxMessage outbox = outboxRepository.findAll().stream()
+                .filter(message -> message.getMessageType() == OutboxMessageType.REJECT_ORDER_COMMAND)
+                .findFirst()
+                .orElseThrow();
         RejectOrderCommand command = jsonMapper.treeToValue(
                 outbox.getPayload(),
                 RejectOrderCommand.class
@@ -119,7 +123,10 @@ class OrderSagaStockFailureIntegrationTest {
         orderSagaService.handleStockReservedEvent(envelope, event);
 
         OrderSaga updatedSaga = orderSagaRepository.findById(ORDER_ID).orElseThrow();
-        OutboxMessage outbox = outboxRepository.findAll().getFirst();
+        OutboxMessage outbox = outboxRepository.findAll().stream()
+                .filter(message -> message.getMessageType() == OutboxMessageType.INITIATE_PAYMENT_COMMAND)
+                .findFirst()
+                .orElseThrow();
         InitiatePaymentCommand command = jsonMapper.treeToValue(
                 outbox.getPayload(),
                 InitiatePaymentCommand.class
@@ -127,12 +134,21 @@ class OrderSagaStockFailureIntegrationTest {
         assertEquals(1, inboxRepository.count());
         assertEquals(OrderSagaState.PAYMENT_PENDING, updatedSaga.getState());
         assertNotEquals(OCCURRED_AT, updatedSaga.getUpdatedAt());
+        assertEquals(2, outboxRepository.count());
         assertEquals(OutboxMessageType.INITIATE_PAYMENT_COMMAND, outbox.getMessageType());
         assertEquals(ORDER_ID, outbox.getAggregateId());
         assertEquals(OutboxStatus.PENDING, outbox.getStatus());
         assertEquals(ORDER_ID, command.orderId());
         assertEquals(totalAmount, command.totalAmount());
         assertEquals(dev.erkut.orderworkflowservice.message.command.Currency.EUR, command.currency());
+        OutboxMessage marker = outboxRepository.findAll().stream()
+                .filter(message -> message.getMessageType() == OutboxMessageType.MARK_ORDER_STOCK_RESERVED_COMMAND)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(ORDER_ID, marker.getAggregateId());
+        assertEquals(ORDER_ID, jsonMapper.treeToValue(
+                marker.getPayload(), MarkOrderStockReservedCommand.class
+        ).orderId());
     }
 
     @Test

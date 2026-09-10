@@ -2,5 +2,6 @@ package dev.erkut.orderservice.outbox.domain;
 
 public enum OutboxMessageType {
     ORDER_CHECKOUT_STARTED,
-    ORDER_REJECTED_EVENT
+    ORDER_REJECTED_EVENT,
+    ORDER_CONFIRMED_EVENT
 }

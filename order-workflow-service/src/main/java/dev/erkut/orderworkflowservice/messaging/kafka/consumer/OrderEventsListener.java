@@ -1,6 +1,7 @@
 package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
+import dev.erkut.orderworkflowservice.message.event.OrderConfirmedEvent;
 import dev.erkut.orderworkflowservice.message.event.OrderEventType;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
 import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
@@ -45,6 +46,14 @@ public class OrderEventsListener {
                 OrderRejectedEvent event =
                         consumerUtil.deserialize(envelope.payload(), OrderRejectedEvent.class);
                 sagaService.handleOrderRejectedEvent(
+                        envelope,
+                        event
+                );
+            }
+            case ORDER_CONFIRMED_EVENT -> {
+                OrderConfirmedEvent event =
+                        consumerUtil.deserialize(envelope.payload(), OrderConfirmedEvent.class);
+                sagaService.handleOrderConfirmedEvent(
                         envelope,
                         event
                 );

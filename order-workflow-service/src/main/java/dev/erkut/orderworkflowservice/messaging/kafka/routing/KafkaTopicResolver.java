@@ -18,7 +18,10 @@ public class KafkaTopicResolver {
 
             case RESERVE_STOCK_COMMAND, CONFIRM_STOCK_RESERVATION_COMMAND ->
                     topics.stockCommands();
-            case REJECT_ORDER_COMMAND ->
+            case REJECT_ORDER_COMMAND,
+                 MARK_ORDER_STOCK_RESERVED_COMMAND,
+                 MARK_ORDER_PAYMENT_COMPLETED_COMMAND,
+                 CONFIRM_ORDER_COMMAND ->
                     topics.orderCommands();
             case INITIATE_PAYMENT_COMMAND ->
                     topics.paymentCommands();

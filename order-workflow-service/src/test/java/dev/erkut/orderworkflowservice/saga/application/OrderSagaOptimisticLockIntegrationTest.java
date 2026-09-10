@@ -121,8 +121,15 @@ class OrderSagaOptimisticLockIntegrationTest {
                     : OutboxMessageType.REJECT_ORDER_COMMAND;
             assertTrue(finalSaga.getState() == OrderSagaState.PAYMENT_PENDING
                     || finalSaga.getState() == OrderSagaState.ORDER_REJECTION_PENDING);
-            assertEquals(1, outboxRepository.count());
-            assertEquals(expectedCommand, outboxRepository.findAll().getFirst().getMessageType());
+            long expectedOutboxCount = finalSaga.getState() == OrderSagaState.PAYMENT_PENDING ? 2 : 1;
+            assertEquals(expectedOutboxCount, outboxRepository.count());
+            assertTrue(outboxRepository.findAll().stream()
+                    .anyMatch(message -> message.getMessageType() == expectedCommand));
+            if (finalSaga.getState() == OrderSagaState.PAYMENT_PENDING) {
+                assertTrue(outboxRepository.findAll().stream()
+                        .anyMatch(message -> message.getMessageType()
+                                == OutboxMessageType.MARK_ORDER_STOCK_RESERVED_COMMAND));
+            }
             assertTrue(inboxRepository.existsById(winner.messageId()));
             assertFalse(inboxRepository.existsById(loser.messageId()));
             assertEquals(1, inboxRepository.count());

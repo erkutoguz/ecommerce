@@ -1,8 +1,12 @@
 package dev.erkut.orderworkflowservice.message;
 
 import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
+import dev.erkut.orderworkflowservice.message.command.ConfirmOrderCommand;
+import dev.erkut.orderworkflowservice.message.command.MarkOrderPaymentCompletedCommand;
+import dev.erkut.orderworkflowservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderworkflowservice.message.event.Currency;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.OrderConfirmedEvent;
 import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -98,5 +102,20 @@ class MessageContractTest {
         assertEquals(ORDER_ID.toString(), payload.get("orderId").asString());
         assertEquals(PRODUCT_ID.toString(), payload.get("items").get(0).get("productId").asString());
         assertEquals(2, payload.get("items").get(0).get("quantity").asInt());
+    }
+
+    @Test
+    void confirmationCommandsAndEvent_shouldContainOnlyOrderId() {
+        JsonMapper mapper = new JsonMapper();
+
+        assertMinimalOrderIdPayload(mapper.valueToTree(new MarkOrderStockReservedCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(new MarkOrderPaymentCompletedCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(new ConfirmOrderCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(new OrderConfirmedEvent(ORDER_ID)));
+    }
+
+    private static void assertMinimalOrderIdPayload(JsonNode payload) {
+        assertEquals(1, payload.size());
+        assertEquals(ORDER_ID.toString(), payload.get("orderId").asString());
     }
 }

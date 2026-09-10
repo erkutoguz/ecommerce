@@ -1,9 +1,6 @@
 package dev.erkut.orderworkflowservice.outbox.application;
 
-import dev.erkut.orderworkflowservice.message.command.ConfirmStockReservationCommand;
-import dev.erkut.orderworkflowservice.message.command.InitiatePaymentCommand;
-import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
-import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
+import dev.erkut.orderworkflowservice.message.command.*;
 import dev.erkut.orderworkflowservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
@@ -80,6 +77,44 @@ public class OutboxService {
     }
 
     @Transactional
+    public void createMarkOrderStockReservedCommand(
+            MarkOrderStockReservedCommand command,
+            Instant createdAt
+    ) {
+        if (command == null) {
+            throw new IllegalArgumentException("Mark order stock reserved command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.MARK_ORDER_STOCK_RESERVED_COMMAND,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void createMarkOrderPaymentCompletedCommand(
+            MarkOrderPaymentCompletedCommand command,
+            Instant createdAt
+    ) {
+        if (command == null) {
+            throw new IllegalArgumentException("Mark order payment completed command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.MARK_ORDER_PAYMENT_COMPLETED_COMMAND,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
+    }
+
+    @Transactional
     public void handleConfirmStockReservationCommand(ConfirmStockReservationCommand command, Instant createdAt) {
         if(command == null) {
             throw new IllegalArgumentException("Confirm stock command cannot be null");
@@ -89,6 +124,22 @@ public class OutboxService {
         OutboxMessage message = OutboxMessage.create(
                 command.orderId(),
                 OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void handleConfirmOrderCommand(ConfirmOrderCommand command, Instant createdAt) {
+        if(command == null) {
+            throw new IllegalArgumentException("Confirm order command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.CONFIRM_ORDER_COMMAND,
                 payload,
                 createdAt
         );
