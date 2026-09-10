@@ -1,6 +1,9 @@
 package dev.erkut.orderservice.messaging.kafka.consumer;
 
 import dev.erkut.orderservice.message.MessageEnvelope;
+import dev.erkut.orderservice.message.command.ConfirmOrderCommand;
+import dev.erkut.orderservice.message.command.MarkOrderPaymentCompletedCommand;
+import dev.erkut.orderservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderservice.message.command.RejectOrderCommand;
 import dev.erkut.orderservice.order.application.OrderService;
 import dev.erkut.orderservice.order.domain.OrderRejectionReason;
@@ -56,6 +59,54 @@ class OrderCommandsListenerTest {
         listener.listenOrderCommands(envelope);
 
         verify(orderService).handleRejectOrderCommand(eq(envelope), commandCaptor.capture());
+        assertEquals(expectedCommand, commandCaptor.getValue());
+    }
+
+    @Test
+    void markOrderStockReservedCommand_shouldDeserializeAndDelegate() {
+        MarkOrderStockReservedCommand expectedCommand = new MarkOrderStockReservedCommand(ORDER_ID);
+        MessageEnvelope envelope = envelope(
+                "MARK_ORDER_STOCK_RESERVED_COMMAND",
+                jsonMapper.valueToTree(expectedCommand)
+        );
+        ArgumentCaptor<MarkOrderStockReservedCommand> commandCaptor =
+                ArgumentCaptor.forClass(MarkOrderStockReservedCommand.class);
+
+        listener.listenOrderCommands(envelope);
+
+        verify(orderService).handleMarkOrderStockReservedCommand(eq(envelope), commandCaptor.capture());
+        assertEquals(expectedCommand, commandCaptor.getValue());
+    }
+
+    @Test
+    void markOrderPaymentCompletedCommand_shouldDeserializeAndDelegate() {
+        MarkOrderPaymentCompletedCommand expectedCommand = new MarkOrderPaymentCompletedCommand(ORDER_ID);
+        MessageEnvelope envelope = envelope(
+                "MARK_ORDER_PAYMENT_COMPLETED_COMMAND",
+                jsonMapper.valueToTree(expectedCommand)
+        );
+        ArgumentCaptor<MarkOrderPaymentCompletedCommand> commandCaptor =
+                ArgumentCaptor.forClass(MarkOrderPaymentCompletedCommand.class);
+
+        listener.listenOrderCommands(envelope);
+
+        verify(orderService).handleMarkOrderPaymentCompletedCommand(eq(envelope), commandCaptor.capture());
+        assertEquals(expectedCommand, commandCaptor.getValue());
+    }
+
+    @Test
+    void confirmOrderCommand_shouldDeserializeAndDelegate() {
+        ConfirmOrderCommand expectedCommand = new ConfirmOrderCommand(ORDER_ID);
+        MessageEnvelope envelope = envelope(
+                "CONFIRM_ORDER_COMMAND",
+                jsonMapper.valueToTree(expectedCommand)
+        );
+        ArgumentCaptor<ConfirmOrderCommand> commandCaptor =
+                ArgumentCaptor.forClass(ConfirmOrderCommand.class);
+
+        listener.listenOrderCommands(envelope);
+
+        verify(orderService).handleConfirmOrderCommand(eq(envelope), commandCaptor.capture());
         assertEquals(expectedCommand, commandCaptor.getValue());
     }
 

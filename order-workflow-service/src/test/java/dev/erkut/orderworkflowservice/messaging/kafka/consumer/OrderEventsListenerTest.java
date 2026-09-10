@@ -3,6 +3,7 @@ package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.event.Currency;
 import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.OrderConfirmedEvent;
 import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +76,22 @@ class OrderEventsListenerTest {
 
         verify(orderSagaService).handleOrderRejectedEvent(eq(envelope), eventCaptor.capture());
         assertEquals(ORDER_ID, eventCaptor.getValue().orderId());
+    }
+
+    @Test
+    void handleOrderEvents_orderConfirmed_shouldDeserializeAndDelegate() {
+        OrderConfirmedEvent expectedEvent = new OrderConfirmedEvent(ORDER_ID);
+        MessageEnvelope envelope = envelope(
+                "ORDER_CONFIRMED_EVENT",
+                jsonMapper.valueToTree(expectedEvent)
+        );
+        ArgumentCaptor<OrderConfirmedEvent> eventCaptor =
+                ArgumentCaptor.forClass(OrderConfirmedEvent.class);
+
+        listener.handleOrderEvents(envelope);
+
+        verify(orderSagaService).handleOrderConfirmedEvent(eq(envelope), eventCaptor.capture());
+        assertEquals(expectedEvent, eventCaptor.getValue());
     }
 
     @Test

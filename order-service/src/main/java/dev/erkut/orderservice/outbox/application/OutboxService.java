@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.outbox.application;
 
 import dev.erkut.orderservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderservice.message.event.OrderConfirmedEvent;
 import dev.erkut.orderservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.orderservice.outbox.domain.OutboxMessage;
@@ -64,6 +65,24 @@ public class OutboxService {
         OutboxMessage message = OutboxMessage.create(
                 event.orderId(),
                 OutboxMessageType.ORDER_REJECTED_EVENT,
+                payload,
+                createdAt
+        );
+
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void createOrderConfirmedEvent(OrderConfirmedEvent event, Instant createdAt) {
+        if (event == null) {
+            throw new InvalidOutboxMessageException("Event cannot be null");
+        }
+
+        JsonNode payload = serialize(event);
+
+        OutboxMessage message = OutboxMessage.create(
+                event.orderId(),
+                OutboxMessageType.ORDER_CONFIRMED_EVENT,
                 payload,
                 createdAt
         );

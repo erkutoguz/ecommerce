@@ -127,6 +127,24 @@ public class OrderSaga {
         this.updatedAt = updatedAt;
     }
 
+    public void markOrderConfirmationPending(Instant updatedAt) {
+        if(state != OrderSagaState.STOCK_CONFIRMATION_PENDING) {
+            throw new IllegalOrderSagaStateException("Order saga cannot be marked as failed from state: " + state);
+        }
+
+        state = OrderSagaState.ORDER_CONFIRMATION_PENDING;
+        this.updatedAt = updatedAt;
+    }
+
+    public void markCompleted(Instant updatedAt) {
+        if(state != OrderSagaState.ORDER_CONFIRMATION_PENDING) {
+            throw new IllegalOrderSagaStateException("Order saga cannot be marked as failed from state: " + state);
+        }
+
+        state = OrderSagaState.COMPLETED;
+        this.updatedAt = updatedAt;
+    }
+
     public UUID getOrderId() {
         return orderId;
     }

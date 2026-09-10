@@ -16,7 +16,7 @@ public class KafkaTopicResolver {
     public String resolve(OutboxMessageType messageType) {
         return switch (messageType) {
 
-            case ORDER_CHECKOUT_STARTED, ORDER_REJECTED_EVENT ->
+            case ORDER_CHECKOUT_STARTED, ORDER_REJECTED_EVENT, ORDER_CONFIRMED_EVENT ->
                     topics.orderEvents();
         };
     }

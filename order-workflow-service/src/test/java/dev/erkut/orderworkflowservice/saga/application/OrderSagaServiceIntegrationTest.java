@@ -190,7 +190,7 @@ class OrderSagaServiceIntegrationTest {
         assertEquals(dev.erkut.orderworkflowservice.saga.domain.Currency.TRY, saga.getCurrency());
         assertTrue(inboxRepository.findById(duplicateMessageId).isEmpty());
         assertEquals(2, inboxRepository.count());
-        assertEquals(2, outboxRepository.count());
+        assertEquals(3, outboxRepository.count());
         assertEquals(
                 1,
                 outboxRepository.findAll().stream()

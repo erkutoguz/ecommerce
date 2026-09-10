@@ -1,8 +1,15 @@
 package dev.erkut.orderservice.order.application;
 
 import dev.erkut.orderservice.inbox.application.InboxService;
+import dev.erkut.orderservice.cart.application.exception.CartNotFoundException;
+import dev.erkut.orderservice.cart.domain.Cart;
+import dev.erkut.orderservice.cart.persistence.CartRepository;
 import dev.erkut.orderservice.message.MessageEnvelope;
+import dev.erkut.orderservice.message.command.ConfirmOrderCommand;
+import dev.erkut.orderservice.message.command.MarkOrderPaymentCompletedCommand;
+import dev.erkut.orderservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderservice.message.command.RejectOrderCommand;
+import dev.erkut.orderservice.message.event.OrderConfirmedEvent;
 import dev.erkut.orderservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderservice.order.api.OrderMapper;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
@@ -27,13 +34,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
+    private final CartRepository cartRepository;
     private final InboxService inboxService;
     private final OutboxService outboxService;
     public OrderService(
             OrderRepository orderRepository,
+            CartRepository cartRepository,
             InboxService inboxService, OutboxService outboxService
     ) {
         this.orderRepository = orderRepository;
+        this.cartRepository = cartRepository;
         this.inboxService = inboxService;
         this.outboxService = outboxService;
     }
@@ -64,6 +74,59 @@ public class OrderService {
 
         OrderRejectedEvent event = new OrderRejectedEvent(command.orderId());
         outboxService.createOrderRejectedEvent(event, now);
+    }
+
+    @Transactional
+    public void handleConfirmOrderCommand(MessageEnvelope envelope, ConfirmOrderCommand command) {
+        validateOrderCommand(envelope, command);
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, command.orderId(), now)) {
+            return;
+        }
+
+        Order order = confirm(command.orderId(), now);
+        Cart cart = cartRepository.findById(order.getSourceCartId())
+                .orElseThrow(() -> new CartNotFoundException(
+                        "Cart not found with id: " + order.getSourceCartId()
+                ));
+        cart.complete(now);
+
+        OrderConfirmedEvent event = new OrderConfirmedEvent(command.orderId());
+        outboxService.createOrderConfirmedEvent(event, now);
+    }
+
+    @Transactional
+    public void handleMarkOrderStockReservedCommand(
+            MessageEnvelope envelope,
+            MarkOrderStockReservedCommand command
+    ) {
+        validateOrderCommand(envelope, command);
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, command.orderId(), now)) {
+            return;
+        }
+
+        markStockReserved(command.orderId(), now);
+    }
+
+    @Transactional
+    public void handleMarkOrderPaymentCompletedCommand(
+            MessageEnvelope envelope,
+            MarkOrderPaymentCompletedCommand command
+    ) {
+        validateOrderCommand(envelope, command);
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, command.orderId(), now)) {
+            return;
+        }
+
+        markPaymentCompleted(command.orderId(), now);
     }
 
     @Transactional

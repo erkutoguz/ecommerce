@@ -3,6 +3,7 @@ package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.event.StockReservationFailedEvent;
 import dev.erkut.orderworkflowservice.message.event.StockReservationFailureReason;
+import dev.erkut.orderworkflowservice.message.event.StockReservationConfirmedEvent;
 import dev.erkut.orderworkflowservice.message.event.StockReservedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +84,27 @@ class StockEventsListenerTest {
         listener.handleStockEvents(envelope);
 
         verify(orderSagaService).handleStockReservedEvent(
+                eq(envelope),
+                eventCaptor.capture()
+        );
+        assertEquals(expectedEvent, eventCaptor.getValue());
+    }
+
+    @Test
+    void handleStockEvents_stockReservationConfirmed_shouldDeserializeAndDelegate() {
+        StockReservationConfirmedEvent expectedEvent = new StockReservationConfirmedEvent(ORDER_ID);
+        MessageEnvelope envelope = new MessageEnvelope(
+                MESSAGE_ID,
+                "STOCK_RESERVATION_CONFIRMED_EVENT",
+                OCCURRED_AT,
+                jsonMapper.valueToTree(expectedEvent)
+        );
+        ArgumentCaptor<StockReservationConfirmedEvent> eventCaptor =
+                ArgumentCaptor.forClass(StockReservationConfirmedEvent.class);
+
+        listener.handleStockEvents(envelope);
+
+        verify(orderSagaService).handleStockReservationConfirmedEvent(
                 eq(envelope),
                 eventCaptor.capture()
         );

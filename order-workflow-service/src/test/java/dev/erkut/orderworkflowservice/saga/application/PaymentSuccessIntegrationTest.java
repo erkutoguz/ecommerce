@@ -4,6 +4,7 @@ import dev.erkut.orderworkflowservice.TestcontainersConfiguration;
 import dev.erkut.orderworkflowservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.command.ConfirmStockReservationCommand;
+import dev.erkut.orderworkflowservice.message.command.MarkOrderPaymentCompletedCommand;
 import dev.erkut.orderworkflowservice.message.event.PaymentCompletedEvent;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
@@ -67,7 +68,10 @@ class PaymentSuccessIntegrationTest {
         orderSagaService.handlePaymentCompletedEvent(envelope(MESSAGE_ID, event), event);
 
         OrderSaga persistedSaga = orderSagaRepository.findById(ORDER_ID).orElseThrow();
-        OutboxMessage outbox = outboxRepository.findAll().getFirst();
+        OutboxMessage outbox = outboxRepository.findAll().stream()
+                .filter(message -> message.getMessageType() == OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND)
+                .findFirst()
+                .orElseThrow();
         ConfirmStockReservationCommand command = jsonMapper.treeToValue(
                 outbox.getPayload(),
                 ConfirmStockReservationCommand.class
@@ -75,11 +79,19 @@ class PaymentSuccessIntegrationTest {
 
         assertEquals(1, inboxRepository.count());
         assertEquals(OrderSagaState.STOCK_CONFIRMATION_PENDING, persistedSaga.getState());
-        assertEquals(1, outboxRepository.count());
+        assertEquals(2, outboxRepository.count());
         assertEquals(ORDER_ID, outbox.getAggregateId());
         assertEquals(OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND, outbox.getMessageType());
         assertEquals(1, outbox.getPayload().size());
         assertEquals(ORDER_ID, command.orderId());
+        OutboxMessage marker = outboxRepository.findAll().stream()
+                .filter(message -> message.getMessageType() == OutboxMessageType.MARK_ORDER_PAYMENT_COMPLETED_COMMAND)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(ORDER_ID, marker.getAggregateId());
+        assertEquals(ORDER_ID, jsonMapper.treeToValue(
+                marker.getPayload(), MarkOrderPaymentCompletedCommand.class
+        ).orderId());
     }
 
     @Test
@@ -95,7 +107,7 @@ class PaymentSuccessIntegrationTest {
         assertEquals(1, inboxRepository.count());
         assertEquals(OrderSagaState.STOCK_CONFIRMATION_PENDING,
                 orderSagaRepository.findById(ORDER_ID).orElseThrow().getState());
-        assertEquals(1, outboxRepository.count());
+        assertEquals(2, outboxRepository.count());
     }
 
     @Test

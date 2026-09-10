@@ -1,7 +1,11 @@
 package dev.erkut.orderservice.message;
 
 import dev.erkut.orderservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderservice.message.command.ConfirmOrderCommand;
+import dev.erkut.orderservice.message.command.MarkOrderPaymentCompletedCommand;
+import dev.erkut.orderservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderservice.message.command.RejectOrderCommand;
+import dev.erkut.orderservice.message.event.OrderConfirmedEvent;
 import dev.erkut.orderservice.message.event.OrderRejectedEvent;
 import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.OrderRejectionReason;
@@ -89,5 +93,20 @@ class MessageContractTest {
                 },
                 OrderRejectionReason.values()
         );
+    }
+
+    @Test
+    void confirmationCommandsAndEvent_shouldContainOnlyOrderId() {
+        JsonMapper mapper = new JsonMapper();
+
+        assertMinimalOrderIdPayload(mapper.valueToTree(new MarkOrderStockReservedCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(new MarkOrderPaymentCompletedCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(new ConfirmOrderCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(new OrderConfirmedEvent(ORDER_ID)));
+    }
+
+    private static void assertMinimalOrderIdPayload(JsonNode payload) {
+        assertEquals(1, payload.size());
+        assertEquals(ORDER_ID.toString(), payload.get("orderId").asText());
     }
 }
