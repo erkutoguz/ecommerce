@@ -39,6 +39,7 @@ class StripePaymentProviderTest {
     private static final UUID ORDER_ID = UUID.fromString("80000000-0000-0000-0000-000000000001");
     private static final StripeProperties PROPERTIES = new StripeProperties(
             "test-secret",
+            "test-whsec",
             "http://localhost:3000/payment/success",
             "http://localhost:3000/payment/cancel"
     );

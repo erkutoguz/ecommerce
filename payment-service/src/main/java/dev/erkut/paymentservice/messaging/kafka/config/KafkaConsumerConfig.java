@@ -1,4 +1,4 @@
-package dev.erkut.paymentservice.messaging.config;
+package dev.erkut.paymentservice.messaging.kafka.config;
 
 import dev.erkut.paymentservice.message.MessageDeserializationException;
 import dev.erkut.paymentservice.outbox.application.exception.OutboxSerializationException;
@@ -56,4 +56,3 @@ public class KafkaConsumerConfig {
         return errorHandler;
     }
 }
-

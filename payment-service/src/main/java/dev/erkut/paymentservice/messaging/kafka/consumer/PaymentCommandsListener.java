@@ -1,4 +1,4 @@
-package dev.erkut.paymentservice.messaging.consumer;
+package dev.erkut.paymentservice.messaging.kafka.consumer;
 
 import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.PaymentCommandType;
@@ -8,12 +8,12 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
-public class PaymentOrdersListener {
+public class PaymentCommandsListener {
 
     private final PaymentService paymentService;
     private final ConsumerUtil consumerUtil;
 
-    public PaymentOrdersListener(PaymentService paymentService, ConsumerUtil consumerUtil) {
+    public PaymentCommandsListener(PaymentService paymentService, ConsumerUtil consumerUtil) {
         this.paymentService = paymentService;
         this.consumerUtil = consumerUtil;
     }

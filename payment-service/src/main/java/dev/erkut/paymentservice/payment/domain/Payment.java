@@ -35,10 +35,10 @@ public class Payment {
     @Column(name = "status", nullable = false, length = 40)
     private PaymentStatus status;
 
-    @Column(name = "provider_payment_id")
+    @Column(name = "provider_payment_id", nullable = false, unique = true)
     private String providerPaymentId;
 
-    @Column(name = "checkout_url")
+    @Column(name = "checkout_url", nullable = false)
     private String checkoutUrl;
 
     @Column(name = "created_at", nullable = false)
@@ -107,6 +107,24 @@ public class Payment {
         this.checkoutUrl = checkoutUrl;
         this.updatedAt = updatedAt;
         this.status = PaymentStatus.AWAITING_CUSTOMER_ACTION;
+    }
+
+    public void markCompleted(Instant occurredAt, Instant updatedAt) {
+        if (occurredAt == null) {
+            throw new IllegalArgumentException("Occurrence time cannot be null");
+        }
+
+        if (updatedAt == null) {
+            throw new IllegalArgumentException("Update time cannot be null");
+        }
+
+        if (status != PaymentStatus.AWAITING_CUSTOMER_ACTION) {
+            throw new InvalidPaymentStateException("Payment cannot be completed from state: " + status);
+        }
+
+        this.status = PaymentStatus.COMPLETED;
+        this.processedAt = occurredAt;
+        this.updatedAt = updatedAt;
     }
 
     public UUID getOrderId() {

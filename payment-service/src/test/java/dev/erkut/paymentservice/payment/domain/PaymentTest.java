@@ -103,6 +103,51 @@ class PaymentTest {
         );
     }
 
+    @Test
+    void markCompleted_shouldSetCompletedStateAndTimestamps() {
+        Payment payment = payment();
+        payment.markAwaitingCustomerAction(
+                "cs_test_123",
+                "https://checkout.stripe.com/test",
+                CREATED_AT.plusSeconds(1)
+        );
+
+        Instant occurredAt = CREATED_AT.plusSeconds(10);
+        Instant updatedAt = CREATED_AT.plusSeconds(11);
+        payment.markCompleted(occurredAt, updatedAt);
+
+        assertEquals(PaymentStatus.COMPLETED, payment.getStatus());
+        assertEquals(occurredAt, payment.getProcessedAt());
+        assertEquals(updatedAt, payment.getUpdatedAt());
+    }
+
+    @Test
+    void markCompleted_shouldRejectCompletionFromProcessingState() {
+        assertThrows(
+                InvalidPaymentStateException.class,
+                () -> payment().markCompleted(CREATED_AT.plusSeconds(1), CREATED_AT.plusSeconds(2))
+        );
+    }
+
+    @Test
+    void markCompleted_shouldRejectNullTimestamps() {
+        Payment payment = payment();
+        payment.markAwaitingCustomerAction(
+                "cs_test_123",
+                "https://checkout.stripe.com/test",
+                CREATED_AT.plusSeconds(1)
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> payment.markCompleted(null, CREATED_AT.plusSeconds(2))
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> payment.markCompleted(CREATED_AT.plusSeconds(2), null)
+        );
+    }
+
     private static Stream<org.junit.jupiter.params.provider.Arguments> invalidCreationArguments() {
         return Stream.of(
                 org.junit.jupiter.params.provider.Arguments.of(null, new BigDecimal("1.00"), Currency.TRY, CREATED_AT),

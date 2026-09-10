@@ -1,4 +1,4 @@
-package dev.erkut.paymentservice.messaging.config;
+package dev.erkut.paymentservice.messaging.kafka.config;
 
 
 import org.springframework.boot.context.properties.ConfigurationProperties;

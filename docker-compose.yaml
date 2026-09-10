@@ -51,10 +51,12 @@ services:
       ORDER_SERVICE_URL: http://order-service:4000
       CUSTOMER_SERVICE_URL: http://customer-service:4001
       PRODUCT_SERVICE_URL: http://product-service:4003
+      PAYMENT_SERVICE_URL: http://payment-service:4007
     depends_on:
       - customer-service
       - order-service
       - product-service
+      - payment-service
     networks:
       - app-network
 

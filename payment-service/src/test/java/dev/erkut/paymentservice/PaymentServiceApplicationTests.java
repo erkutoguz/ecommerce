@@ -4,20 +4,27 @@ import dev.erkut.paymentservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.Currency;
 import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
+import dev.erkut.paymentservice.message.event.PaymentCompletedEvent;
+import dev.erkut.paymentservice.outbox.application.OutboxService;
 import dev.erkut.paymentservice.outbox.persistence.OutboxMessageRepository;
 import dev.erkut.paymentservice.payment.application.PaymentService;
+import dev.erkut.paymentservice.payment.application.exception.PaymentNotFoundException;
 import dev.erkut.paymentservice.payment.domain.Payment;
 import dev.erkut.paymentservice.payment.domain.PaymentStatus;
 import dev.erkut.paymentservice.payment.persistence.PaymentRepository;
 import dev.erkut.paymentservice.provider.payment.PaymentProvider;
 import dev.erkut.paymentservice.provider.payment.PaymentSession;
 import dev.erkut.paymentservice.provider.payment.exception.PaymentProviderException;
+import dev.erkut.paymentservice.provider.payment.stripe.inbox.persistence.WebhookEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -26,6 +33,7 @@ import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -35,10 +43,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(properties = "payment.stripe.secret-key=test-secret")
+@SpringBootTest(properties = {
+        "payment.stripe.secret-key=test-secret",
+        "payment.stripe.webhook-secret=test-whsec",
+        "outbox.relay.enabled=false"
+})
 @Testcontainers
 class PaymentServiceApplicationTests {
 
@@ -67,16 +81,26 @@ class PaymentServiceApplicationTests {
     private OutboxMessageRepository outboxRepository;
 
     @Autowired
+    private WebhookEventRepository webhookEventRepository;
+
+    @Autowired
     private JsonMapper jsonMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockitoBean
     private PaymentProvider paymentProvider;
+
+    @MockitoSpyBean
+    private OutboxService outboxService;
 
     @BeforeEach
     void cleanDatabase() {
         outboxRepository.deleteAll();
         paymentRepository.deleteAll();
         inboxRepository.deleteAll();
+        webhookEventRepository.deleteAll();
     }
 
     @Test
@@ -175,6 +199,27 @@ class PaymentServiceApplicationTests {
     }
 
     @Test
+    void payments_shouldRejectNullProviderDetailsAtDatabaseBoundary() {
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> insertPaymentWithNullProviderDetails(
+                        UUID.fromString("80000000-0000-0000-0000-000000000105"),
+                        null,
+                        "https://checkout.stripe.com/test"
+                )
+        );
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> insertPaymentWithNullProviderDetails(
+                        UUID.fromString("80000000-0000-0000-0000-000000000106"),
+                        "cs_test_123",
+                        null
+                )
+        );
+    }
+
+    @Test
     void handleInitiatePaymentCommand_shouldRejectInvalidInputWithoutClaimingInbox() {
         InitiatePaymentCommand validCommand = new InitiatePaymentCommand(
                 UUID.fromString("80000000-0000-0000-0000-000000000104"),
@@ -210,6 +255,130 @@ class PaymentServiceApplicationTests {
                 eq(invalidAmountCommand.orderId()),
                 eq(invalidAmountCommand.totalAmount()),
                 eq(dev.erkut.paymentservice.payment.domain.Currency.TRY)
+        );
+    }
+
+    @Test
+    void handlePaymentCompleted_shouldCompletePaymentAndCreateOutbox() {
+        UUID orderId = UUID.fromString("80000000-0000-0000-0000-000000000201");
+        persistAwaitingPayment(orderId, "cs_test_completed");
+
+        paymentService.handlePaymentCompleted(
+                "evt_test_completed",
+                "checkout.session.completed",
+                "cs_test_completed",
+                OCCURRED_AT
+        );
+
+        Payment payment = paymentRepository.findById(orderId).orElseThrow();
+        assertEquals(PaymentStatus.COMPLETED, payment.getStatus());
+        assertEquals(OCCURRED_AT, payment.getProcessedAt());
+        assertEquals(1, webhookEventRepository.count());
+        assertEquals(1, outboxRepository.count());
+
+        var outboxMessage = outboxRepository.findAll().getFirst();
+        assertEquals(orderId, outboxMessage.getAggregateId());
+        assertEquals("PAYMENT_COMPLETED_EVENT", outboxMessage.getMessageType().name());
+        assertEquals(orderId.toString(), outboxMessage.getPayload().get("orderId").asText());
+    }
+
+    @Test
+    void handlePaymentCompleted_shouldTreatSameWebhookEventAsNoOp() {
+        UUID orderId = UUID.fromString("80000000-0000-0000-0000-000000000202");
+        persistAwaitingPayment(orderId, "cs_test_duplicate");
+
+        paymentService.handlePaymentCompleted(
+                "evt_test_duplicate",
+                "checkout.session.completed",
+                "cs_test_duplicate",
+                OCCURRED_AT
+        );
+        paymentService.handlePaymentCompleted(
+                "evt_test_duplicate",
+                "checkout.session.completed",
+                "cs_test_duplicate",
+                OCCURRED_AT.plusSeconds(1)
+        );
+
+        assertEquals(1, webhookEventRepository.count());
+        assertEquals(1, outboxRepository.count());
+        assertEquals(PaymentStatus.COMPLETED,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+    }
+
+    @Test
+    void handlePaymentCompleted_shouldRollbackWebhookInboxWhenPaymentIsMissing() {
+        assertThrows(
+                PaymentNotFoundException.class,
+                () -> paymentService.handlePaymentCompleted(
+                        "evt_test_missing_payment",
+                        "checkout.session.completed",
+                        "cs_test_missing_payment",
+                        OCCURRED_AT
+                )
+        );
+
+        assertEquals(0, webhookEventRepository.count());
+        assertEquals(0, outboxRepository.count());
+    }
+
+    @Test
+    void handlePaymentCompleted_shouldRollbackPaymentAndInboxWhenOutboxFails() {
+        UUID orderId = UUID.fromString("80000000-0000-0000-0000-000000000203");
+        persistAwaitingPayment(orderId, "cs_test_outbox_failure");
+        doThrow(new IllegalStateException("outbox unavailable"))
+                .when(outboxService)
+                .handlePaymentCompletedEvent(any(PaymentCompletedEvent.class), any(Instant.class));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> paymentService.handlePaymentCompleted(
+                        "evt_test_outbox_failure",
+                        "checkout.session.completed",
+                        "cs_test_outbox_failure",
+                        OCCURRED_AT
+                )
+        );
+
+        assertEquals(0, webhookEventRepository.count());
+        assertEquals(0, outboxRepository.count());
+        assertEquals(PaymentStatus.AWAITING_CUSTOMER_ACTION,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+    }
+
+    private void persistAwaitingPayment(UUID orderId, String providerPaymentId) {
+        Payment payment = Payment.create(
+                orderId,
+                new BigDecimal("100.00"),
+                dev.erkut.paymentservice.payment.domain.Currency.TRY,
+                OCCURRED_AT.minusSeconds(30)
+        );
+        payment.markAwaitingCustomerAction(
+                providerPaymentId,
+                "https://checkout.stripe.com/test",
+                OCCURRED_AT.minusSeconds(20)
+        );
+        paymentRepository.save(payment);
+    }
+
+    private void insertPaymentWithNullProviderDetails(
+            UUID orderId,
+            String providerPaymentId,
+            String checkoutUrl
+    ) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO payments (
+                    order_id, version, total_amount, currency, status,
+                    provider_payment_id, checkout_url, updated_at, created_at, processed_at
+                ) VALUES (?, 0, ?, 'TRY', 'AWAITING_CUSTOMER_ACTION', ?, ?, ?, ?, NULL)
+                """,
+                orderId,
+                new BigDecimal("100.00"),
+                providerPaymentId,
+                checkoutUrl,
+                Timestamp.from(OCCURRED_AT),
+                Timestamp.from(OCCURRED_AT)
         );
     }
 

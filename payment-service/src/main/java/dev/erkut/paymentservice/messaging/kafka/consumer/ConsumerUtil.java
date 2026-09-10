@@ -1,4 +1,4 @@
-package dev.erkut.paymentservice.messaging.consumer;
+package dev.erkut.paymentservice.messaging.kafka.consumer;
 
 import dev.erkut.paymentservice.message.MessageDeserializationException;
 import dev.erkut.paymentservice.message.MessageEnvelope;

@@ -1,4 +1,4 @@
-package dev.erkut.paymentservice.messaging.consumer;
+package dev.erkut.paymentservice.messaging.kafka.consumer;
 
 import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.Currency;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class PaymentOrdersListenerTest {
+class PaymentCommandsListenerTest {
 
     private static final UUID MESSAGE_ID = UUID.fromString("70000000-0000-0000-0000-000000000001");
     private static final UUID ORDER_ID = UUID.fromString("80000000-0000-0000-0000-000000000001");
@@ -33,12 +33,12 @@ class PaymentOrdersListenerTest {
     private PaymentService paymentService;
 
     private JsonMapper jsonMapper;
-    private PaymentOrdersListener listener;
+    private PaymentCommandsListener listener;
 
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new PaymentOrdersListener(paymentService, new ConsumerUtil(jsonMapper));
+        listener = new PaymentCommandsListener(paymentService, new ConsumerUtil(jsonMapper));
     }
 
     @Test

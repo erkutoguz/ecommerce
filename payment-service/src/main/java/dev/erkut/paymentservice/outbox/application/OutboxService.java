@@ -4,6 +4,7 @@ import dev.erkut.paymentservice.message.event.PaymentCompletedEvent;
 import dev.erkut.paymentservice.message.event.PaymentFailedEvent;
 import dev.erkut.paymentservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.paymentservice.outbox.domain.OutboxMessage;
+import dev.erkut.paymentservice.outbox.domain.OutboxMessageType;
 import dev.erkut.paymentservice.outbox.domain.OutboxStatus;
 import dev.erkut.paymentservice.outbox.persistence.OutboxMessageRepository;
 import org.springframework.stereotype.Service;
@@ -32,13 +33,21 @@ public class OutboxService {
 
     @Transactional
     public void handlePaymentCompletedEvent(PaymentCompletedEvent event, Instant createdAt) {
-        if(event == null) {
+        if (event == null) {
             throw new IllegalArgumentException("Payment event cannot be null");
+        }
+        if (createdAt == null) {
+            throw new IllegalArgumentException("Creation time cannot be null");
         }
 
         JsonNode payload = serialize(event);
-
-
+        OutboxMessage message = OutboxMessage.create(
+                event.orderId(),
+                OutboxMessageType.PAYMENT_COMPLETED_EVENT,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
     }
 
     @Transactional
