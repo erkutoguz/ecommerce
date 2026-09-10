@@ -1,5 +1,6 @@
 package dev.erkut.stockservice.outbox.application;
 
+import dev.erkut.stockservice.message.event.StockReservationConfirmedEvent;
 import dev.erkut.stockservice.message.event.StockReservationFailedEvent;
 import dev.erkut.stockservice.message.event.StockReservedEvent;
 import dev.erkut.stockservice.outbox.application.exception.OutboxSerializationException;
@@ -61,6 +62,27 @@ public class OutboxService {
         OutboxMessage message = OutboxMessage.create(
                 event.orderId(),
                 OutboxMessageType.STOCK_RESERVATION_FAILED_EVENT,
+                payload,
+                createdAt
+        );
+
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void createStockReservationConfirmedEvent(
+            StockReservationConfirmedEvent event,
+            Instant createdAt
+    ) {
+        if (event == null) {
+            throw new IllegalArgumentException("Stock reservation confirmed event cannot be null");
+        }
+
+        JsonNode payload = serialize(event);
+
+        OutboxMessage message = OutboxMessage.create(
+                event.orderId(),
+                OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT,
                 payload,
                 createdAt
         );

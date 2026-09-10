@@ -95,4 +95,30 @@ class OutboxRelayTest {
 
         verify(outboxService, never()).markPublished(any(), any());
     }
+
+    @Test
+    void confirmedEventUsesStockEventsTopicOrderKeyAndOutboxIdAsEnvelopeId() {
+        JsonMapper mapper = new JsonMapper();
+        var payload = mapper.createObjectNode().put("orderId", ORDER_ID.toString());
+        OutboxMessage message = OutboxMessage.create(
+                ORDER_ID,
+                OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT,
+                payload,
+                CREATED_AT
+        );
+        ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
+        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(topicResolver.resolve(OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT))
+                .thenReturn("stock.events");
+        when(messagePublisher.publish(eq("stock.events"), eq(ORDER_ID), envelopeCaptor.capture()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        relay.relay();
+
+        MessageEnvelope envelope = envelopeCaptor.getValue();
+        assertEquals(message.getId(), envelope.messageId());
+        assertEquals(OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT.name(), envelope.messageType());
+        assertSame(payload, envelope.payload());
+        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+    }
 }
