@@ -1,5 +1,6 @@
 package dev.erkut.stockservice.reservation.domain;
 
+import dev.erkut.stockservice.reservation.domain.exception.ReservationStatusException;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -55,6 +56,14 @@ public class Reservation {
                     quantity
                 )
         );
+    }
+
+    public void markConfirmed() {
+        if(status != ReservationStatus.RESERVED) {
+            throw new ReservationStatusException("Reservation cannot confirm from state: " + status);
+        }
+
+        this.status = ReservationStatus.CONFIRMED;
     }
 
     public UUID getOrderId() {

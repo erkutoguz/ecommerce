@@ -2,12 +2,15 @@ package dev.erkut.stockservice.reservation.application;
 
 import dev.erkut.stockservice.inbox.application.InboxService;
 import dev.erkut.stockservice.message.MessageEnvelope;
+import dev.erkut.stockservice.message.command.ConfirmStockReservationCommand;
 import dev.erkut.stockservice.message.command.ReserveStockCommand;
+import dev.erkut.stockservice.message.event.StockReservationConfirmedEvent;
 import dev.erkut.stockservice.message.event.StockReservationFailedEvent;
 import dev.erkut.stockservice.message.event.StockReservedEvent;
 import dev.erkut.stockservice.outbox.application.OutboxService;
 import dev.erkut.stockservice.reservation.domain.Reservation;
 import dev.erkut.stockservice.reservation.domain.StockReservationFailureReason;
+import dev.erkut.stockservice.reservation.domain.exception.ReservationNotFoundException;
 import dev.erkut.stockservice.reservation.persistence.ReservationRepository;
 import dev.erkut.stockservice.stock.application.StockService;
 import dev.erkut.stockservice.stock.domain.StockItem;
@@ -102,6 +105,32 @@ public class ReservationService {
         outboxService.createStockReservedEvent(event, now);
     }
 
+    @Transactional
+    public void handleConfirmStockReservationCommand(MessageEnvelope envelope, ConfirmStockReservationCommand command) {
+        if(command == null) {
+            throw new IllegalArgumentException("Confirm stock reservation command cannot be null");
+        }
+
+        if (command.orderId() == null) {
+            throw new IllegalArgumentException("Order id cannot be null");
+        }
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, command.orderId(), now)) {
+            return;
+        }
+
+        Reservation reservation = reservationRepository.findById(command.orderId())
+                .orElseThrow(() ->
+                        new ReservationNotFoundException("Reservation not found with id: " + command.orderId())
+                );
+
+        reservation.markConfirmed();
+        StockReservationConfirmedEvent event = new StockReservationConfirmedEvent(command.orderId());
+        outboxService.createStockReservationConfirmedEvent(event, now);
+    }
+
     private boolean isDuplicate(
             MessageEnvelope envelope,
             UUID orderId,
@@ -114,7 +143,6 @@ public class ReservationService {
                 now
         );
     }
-
     private void validateCommand(ReserveStockCommand command) {
         if (command == null) {
             throw new IllegalArgumentException("Reserve stock command cannot be null");
