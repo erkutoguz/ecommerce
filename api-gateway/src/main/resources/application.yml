@@ -22,5 +22,10 @@ spring:
               predicates:
                 - Path=/products/**
 
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URL:http://localhost:4007}
+              predicates:
+                - Path=/payments/**
+
 server:
   port: 4002

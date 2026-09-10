@@ -117,7 +117,7 @@ class OrderSagaOptimisticLockIntegrationTest {
 
             OrderSaga finalSaga = orderSagaRepository.findById(ORDER_ID).orElseThrow();
             OutboxMessageType expectedCommand = finalSaga.getState() == OrderSagaState.PAYMENT_PENDING
-                    ? OutboxMessageType.PROCESS_PAYMENT_COMMAND
+                    ? OutboxMessageType.INITIATE_PAYMENT_COMMAND
                     : OutboxMessageType.REJECT_ORDER_COMMAND;
             assertTrue(finalSaga.getState() == OrderSagaState.PAYMENT_PENDING
                     || finalSaga.getState() == OrderSagaState.ORDER_REJECTION_PENDING);
