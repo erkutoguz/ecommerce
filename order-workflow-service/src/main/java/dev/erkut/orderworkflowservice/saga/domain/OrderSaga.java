@@ -118,6 +118,15 @@ public class OrderSaga {
         this.updatedAt = updatedAt;
     }
 
+    public void markStockReservationConfirmationPending(Instant updatedAt) {
+        if (state != OrderSagaState.PAYMENT_PENDING) {
+            throw new IllegalOrderSagaStateException("Order saga cannot be marked as failed from state: " + state);
+        }
+
+        state = OrderSagaState.STOCK_CONFIRMATION_PENDING;
+        this.updatedAt = updatedAt;
+    }
+
     public UUID getOrderId() {
         return orderId;
     }

@@ -55,4 +55,12 @@ public class KafkaTopicConfig {
                 .partitions(3)
                 .build();
     }
+
+    @Bean
+    public NewTopic paymentEventsDltTopic() {
+        return TopicBuilder
+                .name(topics.paymentEventsDlt())
+                .partitions(3)
+                .build();
+    }
 }

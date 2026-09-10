@@ -8,6 +8,8 @@ public record KafkaTopicsProperties(
         String stockCommands,
         String stockEvents,
         String paymentCommands,
+        String paymentEvents,
+        String paymentEventsDlt,
         String orderCommands,
         String orderEventsDlt,
         String stockEventsDlt

@@ -11,6 +11,8 @@ class KafkaTopicConfigTest {
             "stock.commands",
             "stock.events",
             "payment.commands",
+            "payment.events",
+            "payment.events.DLT",
             "order.commands",
             "order.events.DLT",
             "stock.events.DLT"

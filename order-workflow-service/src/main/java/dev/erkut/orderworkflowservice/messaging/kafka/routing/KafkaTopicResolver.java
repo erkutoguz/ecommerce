@@ -16,7 +16,7 @@ public class KafkaTopicResolver {
     public String resolve(OutboxMessageType messageType) {
         return switch (messageType) {
 
-            case RESERVE_STOCK_COMMAND ->
+            case RESERVE_STOCK_COMMAND, CONFIRM_STOCK_RESERVATION_COMMAND ->
                     topics.stockCommands();
             case REJECT_ORDER_COMMAND ->
                     topics.orderCommands();

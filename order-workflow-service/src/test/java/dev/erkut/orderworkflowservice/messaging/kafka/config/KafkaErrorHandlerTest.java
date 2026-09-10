@@ -127,6 +127,8 @@ class KafkaErrorHandlerTest {
                         "stock.commands",
                         STOCK_EVENTS,
                         "payment.commands",
+                        "payment.events",
+                        "payment.events.DLT",
                         "order.commands",
                         ORDER_EVENTS_DLT,
                         STOCK_EVENTS_DLT

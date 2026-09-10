@@ -38,6 +38,13 @@ public class KafkaConsumerConfig {
                                 );
                             }
 
+                            if (record.topic().equals(topics.paymentEvents())) {
+                                return new TopicPartition(
+                                        topics.paymentEventsDlt(),
+                                        record.partition()
+                                );
+                            }
+
                             throw new IllegalStateException("No DLT configured for topic: " + record.topic());
                         }
                 );

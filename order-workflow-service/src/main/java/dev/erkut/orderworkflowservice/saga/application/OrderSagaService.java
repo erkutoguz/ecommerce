@@ -2,14 +2,8 @@ package dev.erkut.orderworkflowservice.saga.application;
 
 import dev.erkut.orderworkflowservice.inbox.application.InboxService;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.command.OrderRejectionReason;
-import dev.erkut.orderworkflowservice.message.command.InitiatePaymentCommand;
-import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
-import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
-import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
-import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
-import dev.erkut.orderworkflowservice.message.event.StockReservationFailedEvent;
-import dev.erkut.orderworkflowservice.message.event.StockReservedEvent;
+import dev.erkut.orderworkflowservice.message.command.*;
+import dev.erkut.orderworkflowservice.message.event.*;
 import dev.erkut.orderworkflowservice.outbox.application.OutboxService;
 import dev.erkut.orderworkflowservice.saga.application.exception.OrderSagaNotFoundException;
 import dev.erkut.orderworkflowservice.saga.domain.OrderSaga;
@@ -163,6 +157,25 @@ public class OrderSagaService {
         orderSaga.markFailed(now);
     }
 
+    @Transactional
+    public void handlePaymentCompletedEvent(MessageEnvelope envelope, PaymentCompletedEvent event) {
+        validateOrderEvent(envelope, event);
+
+        Instant now = Instant.now();
+
+        if(isDuplicate(envelope, event.orderId(), now)) {
+            return;
+        }
+
+        OrderSaga orderSaga = orderSagaRepository.findById(event.orderId())
+                .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
+
+        orderSaga.markStockReservationConfirmationPending(now);
+
+        ConfirmStockReservationCommand command = new ConfirmStockReservationCommand(event.orderId());
+        outboxService.handleConfirmStockReservationCommand(command, now);
+    }
+
     private void validateStockEvent(MessageEnvelope envelope, Object event) {
         if (envelope == null) {
             throw new IllegalArgumentException("Message envelope cannot be null");
@@ -183,6 +196,16 @@ public class OrderSagaService {
 
     }
 
+    private void validatePaymentEvent(MessageEnvelope envelope, Object event) {
+        if (envelope == null) {
+            throw new IllegalArgumentException("Message envelope cannot be null");
+        }
+        if (event == null) {
+            throw new IllegalArgumentException("Payment event cannot be null");
+        }
+
+    }
+
     private boolean isDuplicate(
             MessageEnvelope envelope,
             UUID orderId,
@@ -195,6 +218,4 @@ public class OrderSagaService {
                 now
         );
     }
-
-
 }

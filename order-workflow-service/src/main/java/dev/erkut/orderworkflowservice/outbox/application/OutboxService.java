@@ -1,5 +1,6 @@
 package dev.erkut.orderworkflowservice.outbox.application;
 
+import dev.erkut.orderworkflowservice.message.command.ConfirmStockReservationCommand;
 import dev.erkut.orderworkflowservice.message.command.InitiatePaymentCommand;
 import dev.erkut.orderworkflowservice.message.command.RejectOrderCommand;
 import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
@@ -72,6 +73,22 @@ public class OutboxService {
         OutboxMessage message = OutboxMessage.create(
                 command.orderId(),
                 OutboxMessageType.INITIATE_PAYMENT_COMMAND,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void handleConfirmStockReservationCommand(ConfirmStockReservationCommand command, Instant createdAt) {
+        if(command == null) {
+            throw new IllegalArgumentException("Confirm stock command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND,
                 payload,
                 createdAt
         );
