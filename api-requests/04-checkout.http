@@ -1,0 +1,18 @@
+### Step 4 - Start checkout
+# Requires: cartId from step 3 and Product A in the cart.
+# Produces: orderId from the real OrderResponse.orderId field.
+
+POST {{baseUrl}}/carts/{{cartId}}/checkout
+Content-Type: application/json
+
+{
+  "currency": "TRY"
+}
+
+> {%
+    client.test("checkout creates an order", function () {
+        client.assert(response.status === 201, "Expected 201 from checkout");
+        client.assert(response.body.orderId != null, "Order id must be present");
+    });
+    client.global.set("orderId", response.body.orderId);
+%}

@@ -199,6 +199,7 @@ services:
     ports:
       - "4006:4006"
     environment:
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://stock-db:5432/stock
       SPRING_DATASOURCE_USERNAME: stock
       SPRING_DATASOURCE_PASSWORD: stock-pass

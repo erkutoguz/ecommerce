@@ -1,0 +1,8 @@
+### Step 5 - Observe checkout/order progression
+# Requires: orderId from step 4.
+# Produces: no variable. Run again after a few seconds if the status is still pending.
+
+GET {{baseUrl}}/orders/{{orderId}}
+
+### List this customer's orders
+GET {{baseUrl}}/orders?customerId={{customerId}}&page=0&size=10

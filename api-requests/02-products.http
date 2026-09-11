@@ -1,0 +1,14 @@
+### Step 2 - Read seeded products
+# Requires: step 0.
+# Produces: deterministic product IDs used by cart requests.
+
+GET {{baseUrl}}/products?page=0&size=10
+
+### Product A - in-stock happy-path product
+GET {{baseUrl}}/products/{{productAId}}
+
+### Product B - second in-stock product
+GET {{baseUrl}}/products/{{productBId}}
+
+### Product C - active product with zero stock
+GET {{baseUrl}}/products/{{outOfStockProductId}}

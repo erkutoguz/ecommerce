@@ -1,0 +1,25 @@
+### Step 3 - Create/get an active cart and add Product A
+# Requires: step 1, step 2, and customerId/productAId from http-client.env.json.
+# Produces: cartId, which step 4 uses for checkout.
+
+GET {{baseUrl}}/carts/current?customerId={{customerId}}
+
+> {%
+    client.test("active cart is returned", function () {
+        client.assert(response.status === 200, "Expected 200 from current cart");
+        client.assert(response.body.id != null, "Cart id must be present");
+    });
+    client.global.set("cartId", response.body.id);
+%}
+
+### Add two units of Product A
+POST {{baseUrl}}/carts/{{cartId}}/items
+Content-Type: application/json
+
+{
+  "productId": "{{productAId}}",
+  "quantity": 2
+}
+
+### Verify the cart item snapshot/input
+GET {{baseUrl}}/carts/{{cartId}}

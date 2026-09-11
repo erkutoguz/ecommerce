@@ -1,0 +1,10 @@
+### Step 1 - Read the seeded development customer
+# Requires: step 0 and the local environment.
+# Produces: the customer prerequisite used by the cart flow.
+
+GET {{baseUrl}}/customers/{{customerId}}
+
+### Read the additional customers used by failure flows
+GET {{baseUrl}}/customers/{{outOfStockCustomerId}}
+
+GET {{baseUrl}}/customers/{{paymentExpiryCustomerId}}

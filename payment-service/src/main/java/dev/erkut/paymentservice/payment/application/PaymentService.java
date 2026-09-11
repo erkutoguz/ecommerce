@@ -6,6 +6,8 @@ import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
 import dev.erkut.paymentservice.message.event.PaymentCompletedEvent;
 import dev.erkut.paymentservice.message.event.PaymentFailedEvent;
 import dev.erkut.paymentservice.outbox.application.OutboxService;
+import dev.erkut.paymentservice.payment.api.PaymentMapper;
+import dev.erkut.paymentservice.payment.api.response.PaymentResponse;
 import dev.erkut.paymentservice.payment.domain.Currency;
 import dev.erkut.paymentservice.payment.domain.Payment;
 import dev.erkut.paymentservice.payment.domain.PaymentStatus;
@@ -39,6 +41,15 @@ public class PaymentService {
         this.paymentProvider = paymentProvider;
         this.webhookEventService = webhookEventService;
         this.outboxService = outboxService;
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentByOrderId(UUID orderId) {
+        Payment payment = paymentRepository.findById(orderId)
+                .orElseThrow(() -> new PaymentNotFoundException(
+                        "Payment not found with order id: " + orderId
+                ));
+        return PaymentMapper.toResponse(payment);
     }
 
     @Transactional

@@ -1,0 +1,15 @@
+### Step 6 - Payment checkpoint
+# Requires: orderId from step 4. Wait a few seconds after checkout for Kafka processing.
+# If this returns 404, payment creation is still in progress; run the request again shortly.
+# Produces: checkoutUrl captured from the persisted Payment response.
+
+GET {{baseUrl}}/payments/order/{{orderId}}
+
+> {%
+    client.test("payment checkpoint is available", function () {
+        client.assert(response.status === 200, "Expected 200 after payment creation");
+        client.assert(response.body.orderId != null, "Order id must be present");
+        client.assert(response.body.checkoutUrl != null, "Checkout URL must be present");
+    });
+    client.global.set("checkoutUrl", response.body.checkoutUrl);
+%}

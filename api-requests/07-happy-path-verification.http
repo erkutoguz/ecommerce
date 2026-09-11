@@ -1,0 +1,7 @@
+### Step 7 - Verify the successful saga result
+# Requires: Stripe Checkout completed and webhook forwarded; wait for Kafka processing.
+# Produces: order CONFIRMED and source cart COMPLETED.
+
+GET {{baseUrl}}/orders/{{orderId}}
+
+GET {{baseUrl}}/carts/{{cartId}}

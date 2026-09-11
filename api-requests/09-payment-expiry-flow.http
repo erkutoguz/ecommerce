@@ -1,0 +1,47 @@
+### Step 9 - Payment expiry flow
+# Expire the Stripe Checkout Session after checkout.
+
+GET {{baseUrl}}/carts/current?customerId={{paymentExpiryCustomerId}}
+
+> {%
+    client.global.set("paymentExpiryCartId", response.body.id);
+%}
+
+### Add the payment-expiry test product
+POST {{baseUrl}}/carts/{{paymentExpiryCartId}}/items
+Content-Type: application/json
+
+{
+  "productId": "{{productAId}}",
+  "quantity": 1
+}
+
+### Start checkout
+POST {{baseUrl}}/carts/{{paymentExpiryCartId}}/checkout
+Content-Type: application/json
+
+{
+  "currency": "TRY"
+}
+
+> {%
+    client.global.set("paymentExpiryOrderId", response.body.orderId);
+%}
+
+### Wait for asynchronous payment creation and read the persisted checkout URL
+GET {{baseUrl}}/payments/order/{{paymentExpiryOrderId}}
+
+> {%
+    client.test("payment checkpoint is available", function () {
+        client.assert(response.status === 200, "Expected 200 after payment creation");
+        client.assert(response.body.status === "AWAITING_CUSTOMER_ACTION", "Payment must await customer action");
+        client.assert(response.body.checkoutUrl != null, "Checkout URL must be present");
+    });
+    client.global.set("paymentExpiryCheckoutUrl", response.body.checkoutUrl);
+%}
+
+### External: use the documented provider/DB path to obtain the provider session id, expire it, then wait for webhook/Kafka
+GET {{baseUrl}}/orders/{{paymentExpiryOrderId}}
+
+### Check the reopened cart
+GET {{baseUrl}}/carts/{{paymentExpiryCartId}}
