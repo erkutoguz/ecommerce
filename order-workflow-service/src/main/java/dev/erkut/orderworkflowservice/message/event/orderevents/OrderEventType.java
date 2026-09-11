@@ -1,4 +1,4 @@
-package dev.erkut.orderworkflowservice.message.event;
+package dev.erkut.orderworkflowservice.message.event.orderevents;
 
 public enum OrderEventType {
     ORDER_CHECKOUT_STARTED,

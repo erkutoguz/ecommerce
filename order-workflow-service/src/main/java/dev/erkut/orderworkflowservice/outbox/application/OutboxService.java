@@ -1,6 +1,13 @@
 package dev.erkut.orderworkflowservice.outbox.application;
 
 import dev.erkut.orderworkflowservice.message.command.*;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.ConfirmOrderCommand;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.MarkOrderPaymentCompletedCommand;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.MarkOrderStockReservedCommand;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.RejectOrderCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ConfirmStockReservationCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ReleaseStockReservationCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ReserveStockCommand;
 import dev.erkut.orderworkflowservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
@@ -124,6 +131,22 @@ public class OutboxService {
         OutboxMessage message = OutboxMessage.create(
                 command.orderId(),
                 OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void createReleaseStockReservationCommand(ReleaseStockReservationCommand command, Instant createdAt) {
+        if(command == null) {
+            throw new IllegalArgumentException("Release stock command cannot be null");
+        }
+
+        JsonNode payload = serialize(command);
+        OutboxMessage message = OutboxMessage.create(
+                command.orderId(),
+                OutboxMessageType.RELEASE_STOCK_RESERVATION_COMMAND,
                 payload,
                 createdAt
         );

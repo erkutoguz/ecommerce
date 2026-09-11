@@ -34,7 +34,8 @@ class StripeWebhookServiceTest {
                         "test-secret",
                         WEBHOOK_SECRET,
                         "http://localhost/success",
-                        "http://localhost/cancel"
+                        "http://localhost/cancel",
+                        30
                 ),
                 paymentService
         );

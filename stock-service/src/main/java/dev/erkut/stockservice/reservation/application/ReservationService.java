@@ -3,12 +3,15 @@ package dev.erkut.stockservice.reservation.application;
 import dev.erkut.stockservice.inbox.application.InboxService;
 import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.message.command.ConfirmStockReservationCommand;
+import dev.erkut.stockservice.message.command.ReleaseStockReservationCommand;
 import dev.erkut.stockservice.message.command.ReserveStockCommand;
 import dev.erkut.stockservice.message.event.StockReservationConfirmedEvent;
 import dev.erkut.stockservice.message.event.StockReservationFailedEvent;
+import dev.erkut.stockservice.message.event.StockReservationReleasedEvent;
 import dev.erkut.stockservice.message.event.StockReservedEvent;
 import dev.erkut.stockservice.outbox.application.OutboxService;
 import dev.erkut.stockservice.reservation.domain.Reservation;
+import dev.erkut.stockservice.reservation.domain.ReservationItem;
 import dev.erkut.stockservice.reservation.domain.StockReservationFailureReason;
 import dev.erkut.stockservice.reservation.domain.exception.ReservationNotFoundException;
 import dev.erkut.stockservice.reservation.persistence.ReservationRepository;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ReservationService {
@@ -126,9 +130,40 @@ public class ReservationService {
                         new ReservationNotFoundException("Reservation not found with id: " + command.orderId())
                 );
 
+        reservation.ensureReserved();
+        stockService.handleProductConfirm(reservation.getItems());
         reservation.markConfirmed();
+
         StockReservationConfirmedEvent event = new StockReservationConfirmedEvent(command.orderId());
         outboxService.createStockReservationConfirmedEvent(event, now);
+    }
+
+    @Transactional
+    public void handleReleaseStockReservationCommand(MessageEnvelope envelope, ReleaseStockReservationCommand command) {
+        if(command == null) {
+            throw new IllegalArgumentException("Release stock reservation command cannot be null");
+        }
+
+        if (command.orderId() == null) {
+            throw new IllegalArgumentException("Order id cannot be null");
+        }
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, command.orderId(), now)) {
+            return;
+        }
+
+        Reservation reservation = reservationRepository.findById(command.orderId())
+                .orElseThrow(() ->
+                        new ReservationNotFoundException("Reservation not found with id: " + command.orderId())
+                );
+
+        reservation.ensureReserved();
+        stockService.handleProductRelease(reservation.getItems());
+        reservation.releaseStock();
+        StockReservationReleasedEvent event = new StockReservationReleasedEvent(command.orderId());
+        outboxService.createStockReservationReleasedEvent(event, now);
     }
 
     private boolean isDuplicate(

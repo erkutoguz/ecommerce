@@ -12,7 +12,12 @@ public final class PaymentFailureReasonMapper {
         }
         return switch (reason) {
             case DECLINED ->
-                    dev.erkut.paymentservice.message.event.PaymentFailureReason.DECLINED;
+                    throw new IllegalArgumentException(
+                            "DECLINED is not a supported terminal payment wire failure reason"
+                    );
+            case EXPIRED ->
+                    dev.erkut.paymentservice.message.event.PaymentFailureReason.SESSION_EXPIRED;
+
         };
     }
 }

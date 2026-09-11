@@ -38,6 +38,10 @@ public class OrderSaga {
     @Column(name = "state", nullable = false, length = 50)
     private OrderSagaState state;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "failure_reason", length = 40)
+    private OrderSagaFailureReason failureReason;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
@@ -77,6 +81,7 @@ public class OrderSaga {
         this.currency = currency;
         this.customerId = customerId;
         this.state = OrderSagaState.STOCK_RESERVATION_PENDING;
+        this.failureReason = null;
         this.updatedAt = now;
         this.createdAt = now;
     }
@@ -127,6 +132,36 @@ public class OrderSaga {
         this.updatedAt = updatedAt;
     }
 
+    public void markStockReservationReleasePending(
+            Instant updatedAt,
+            OrderSagaFailureReason failureReason
+    ) {
+        if (state != OrderSagaState.PAYMENT_PENDING) {
+            throw new IllegalOrderSagaStateException("Order saga cannot be marked as failed from state: " + state);
+        }
+        if (failureReason == null) {
+            throw new IllegalArgumentException("Failure reason cannot be null");
+        }
+
+        state = OrderSagaState.STOCK_RELEASE_PENDING;
+        this.failureReason = failureReason;
+        this.updatedAt = updatedAt;
+    }
+
+    public void markOrderRejectionPendingAfterStockRelease(Instant updatedAt) {
+        if (state != OrderSagaState.STOCK_RELEASE_PENDING) {
+            throw new IllegalOrderSagaStateException(
+                    "Order rejection cannot be started from state: " + state
+            );
+        }
+        if (failureReason == null) {
+            throw new IllegalOrderSagaStateException("Failure reason is required for payment compensation");
+        }
+
+        state = OrderSagaState.ORDER_REJECTION_PENDING;
+        this.updatedAt = updatedAt;
+    }
+
     public void markOrderConfirmationPending(Instant updatedAt) {
         if(state != OrderSagaState.STOCK_CONFIRMATION_PENDING) {
             throw new IllegalOrderSagaStateException("Order saga cannot be marked as failed from state: " + state);
@@ -163,6 +198,10 @@ public class OrderSaga {
 
     public OrderSagaState getState() {
         return state;
+    }
+
+    public OrderSagaFailureReason getFailureReason() {
+        return failureReason;
     }
 
     public Instant getCreatedAt() {

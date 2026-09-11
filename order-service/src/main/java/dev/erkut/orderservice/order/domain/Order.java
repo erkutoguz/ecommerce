@@ -206,6 +206,7 @@ public class Order {
 
             case PENDING_PAYMENT ->
                     reason == OrderRejectionReason.PAYMENT_DECLINED
+                            || reason == OrderRejectionReason.PAYMENT_EXPIRED
                             || reason == OrderRejectionReason.USER_CANCELLED
                             || reason == OrderRejectionReason.RESERVATION_EXPIRED;
 

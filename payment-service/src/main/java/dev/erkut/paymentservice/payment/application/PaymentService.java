@@ -4,9 +4,11 @@ import dev.erkut.paymentservice.inbox.application.InboxService;
 import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
 import dev.erkut.paymentservice.message.event.PaymentCompletedEvent;
+import dev.erkut.paymentservice.message.event.PaymentFailedEvent;
 import dev.erkut.paymentservice.outbox.application.OutboxService;
 import dev.erkut.paymentservice.payment.domain.Currency;
 import dev.erkut.paymentservice.payment.domain.Payment;
+import dev.erkut.paymentservice.payment.domain.PaymentStatus;
 import dev.erkut.paymentservice.payment.persistence.PaymentRepository;
 import dev.erkut.paymentservice.payment.application.exception.PaymentNotFoundException;
 import dev.erkut.paymentservice.provider.payment.PaymentProvider;
@@ -66,7 +68,7 @@ public class PaymentService {
             String providerPaymentId,
             Instant occurredAt
     ) {
-        validatePaymentCompleted(eventId, eventType, providerPaymentId, occurredAt);
+        validatePaymentEvent(eventId, eventType, providerPaymentId, occurredAt);
 
         Instant now = Instant.now();
 
@@ -87,7 +89,42 @@ public class PaymentService {
 
     }
 
-    private void validatePaymentCompleted(
+    @Transactional
+    public void handleCheckoutSessionExpired(
+            String eventId,
+            String eventType,
+            String providerPaymentId,
+            Instant occurredAt
+    ) {
+        validatePaymentEvent(eventId, eventType, providerPaymentId, occurredAt);
+
+        Instant now = Instant.now();
+
+        if (isWebhookDuplicate(eventId, eventType, providerPaymentId, now)) {
+            return;
+        }
+
+        Payment payment = paymentRepository.findByProviderPaymentId(providerPaymentId)
+                .orElseThrow(() -> new PaymentNotFoundException(
+                        "Payment not found for provider payment id: " + providerPaymentId
+                ));
+
+        if (payment.getStatus() == PaymentStatus.COMPLETED
+                || payment.getStatus() == PaymentStatus.FAILED) {
+            return;
+        }
+
+        payment.markFailed(occurredAt, now);
+        outboxService.handlePaymentFailedEvent(
+                new PaymentFailedEvent(
+                        payment.getOrderId(),
+                        PaymentFailureReasonMapper.toEvent(PaymentFailureReason.EXPIRED)
+                ),
+                now
+        );
+    }
+
+    private void validatePaymentEvent(
             String eventId,
             String eventType,
             String providerPaymentId,

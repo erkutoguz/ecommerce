@@ -88,6 +88,7 @@ class MessageContractTest {
                 new OrderRejectionReason[]{
                         OrderRejectionReason.OUT_OF_STOCK,
                         OrderRejectionReason.PAYMENT_DECLINED,
+                        OrderRejectionReason.PAYMENT_EXPIRED,
                         OrderRejectionReason.USER_CANCELLED,
                         OrderRejectionReason.RESERVATION_EXPIRED
                 },

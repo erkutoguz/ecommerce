@@ -52,6 +52,21 @@ public class OutboxService {
 
     @Transactional
     public void handlePaymentFailedEvent(PaymentFailedEvent event, Instant createdAt) {
+        if (event == null) {
+            throw new IllegalArgumentException("Payment event cannot be null");
+        }
+        if (createdAt == null) {
+            throw new IllegalArgumentException("Creation time cannot be null");
+        }
+
+        JsonNode payload = serialize(event);
+        OutboxMessage message = OutboxMessage.create(
+                event.orderId(),
+                OutboxMessageType.PAYMENT_FAILED_EVENT,
+                payload,
+                createdAt
+        );
+        outboxRepository.save(message);
     }
 
     @Transactional(readOnly = true)

@@ -40,6 +40,7 @@ class KafkaTopicResolverTest {
         return Stream.of(
                 Arguments.of(OutboxMessageType.RESERVE_STOCK_COMMAND, "stock.commands"),
                 Arguments.of(OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND, "stock.commands"),
+                Arguments.of(OutboxMessageType.RELEASE_STOCK_RESERVATION_COMMAND, "stock.commands"),
                 Arguments.of(OutboxMessageType.REJECT_ORDER_COMMAND, "order.commands"),
                 Arguments.of(OutboxMessageType.MARK_ORDER_STOCK_RESERVED_COMMAND, "order.commands"),
                 Arguments.of(OutboxMessageType.MARK_ORDER_PAYMENT_COMPLETED_COMMAND, "order.commands"),

@@ -12,12 +12,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,6 +51,9 @@ class ReservationConfirmationRollbackIntegrationTest {
     @Autowired
     private OutboxMessageRepository outboxRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @MockitoBean
     private OutboxService outboxService;
 
@@ -56,7 +61,15 @@ class ReservationConfirmationRollbackIntegrationTest {
     void outboxFailureRollsBackInboxAndReservationConfirmation() {
         UUID orderId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
-        reservationRepository.saveAndFlush(Reservation.create(orderId, CREATED_AT));
+        UUID productId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO stock_items (
+                    product_id, on_hand_quantity, reserved_quantity, active, updated_at, created_at
+                ) VALUES (?, 10, 2, true, ?, ?)
+                """, productId, Timestamp.from(CREATED_AT), Timestamp.from(CREATED_AT));
+        Reservation reservation = Reservation.create(orderId, CREATED_AT);
+        reservation.addItem(productId, 2);
+        reservationRepository.saveAndFlush(reservation);
         doThrow(new RuntimeException("outbox persistence failure"))
                 .when(outboxService).createStockReservationConfirmedEvent(any(), any());
 
@@ -74,6 +87,16 @@ class ReservationConfirmationRollbackIntegrationTest {
         assertFalse(inboxRepository.existsById(messageId));
         assertEquals(ReservationStatus.RESERVED,
                 reservationRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(10, quantity(productId, "on_hand_quantity"));
+        assertEquals(2, quantity(productId, "reserved_quantity"));
         assertEquals(0, outboxRepository.count());
+    }
+
+    private int quantity(UUID productId, String column) {
+        return jdbcTemplate.queryForObject(
+                "SELECT " + column + " FROM stock_items WHERE product_id = ?",
+                Integer.class,
+                productId
+        );
     }
 }

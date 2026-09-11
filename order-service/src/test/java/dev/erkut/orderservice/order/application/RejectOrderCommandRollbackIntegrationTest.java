@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.order.application;
 
 import dev.erkut.orderservice.cart.domain.Cart;
+import dev.erkut.orderservice.cart.domain.CartStatus;
 import dev.erkut.orderservice.cart.persistence.CartRepository;
 import dev.erkut.orderservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.orderservice.message.MessageEnvelope;
@@ -96,6 +97,9 @@ class RejectOrderCommandRollbackIntegrationTest {
         assertEquals(OrderStatus.PENDING_STOCK, reloaded.getStatus());
         assertNull(reloaded.getRejectionReason());
         assertNull(reloaded.getRejectedAt());
+        assertEquals(CartStatus.CHECKOUT_LOCKED,
+                transaction().execute(status -> cartRepository.findById(reloaded.getSourceCartId())
+                        .orElseThrow().getStatus()));
         assertFalse(inboxRepository.existsById(messageId));
         assertEquals(0, outboxRepository.findAll().stream()
                 .filter(message -> message.getAggregateId().equals(orderId))
@@ -105,13 +109,17 @@ class RejectOrderCommandRollbackIntegrationTest {
     private UUID seedPendingOrder() {
         return transaction().execute(status -> {
             UUID customerId = UUID.randomUUID();
-            Cart cart = cartRepository.save(Cart.create(customerId, CREATED_AT.minusSeconds(60)));
+            UUID productId = UUID.randomUUID();
+            Cart cart = Cart.create(customerId, CREATED_AT.minusSeconds(60));
+            cart.addCartItem(productId, 1, CREATED_AT.minusSeconds(50));
+            cart.lockForCheckout(CREATED_AT.minusSeconds(40));
+            cartRepository.save(cart);
             Order order = Order.create(
                     cart.getId(),
                     customerId,
                     Currency.TRY,
                     List.of(new OrderLineSnapshot(
-                            UUID.randomUUID(),
+                            productId,
                             "Rollback product",
                             new BigDecimal("100.00"),
                             1

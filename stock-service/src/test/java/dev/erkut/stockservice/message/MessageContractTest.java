@@ -3,7 +3,9 @@ package dev.erkut.stockservice.message;
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
 import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.stockservice.message.command.ConfirmStockReservationCommand;
+import dev.erkut.stockservice.message.command.ReleaseStockReservationCommand;
 import dev.erkut.stockservice.message.event.StockReservationConfirmedEvent;
+import dev.erkut.stockservice.message.event.StockReservationReleasedEvent;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -45,6 +47,20 @@ class MessageContractTest {
 
         var commandPayload = mapper.valueToTree(new ConfirmStockReservationCommand(orderId));
         var eventPayload = mapper.valueToTree(new StockReservationConfirmedEvent(orderId));
+
+        assertEquals(1, commandPayload.size());
+        assertEquals(1, eventPayload.size());
+        assertEquals(orderId.toString(), commandPayload.get("orderId").asText());
+        assertEquals(orderId.toString(), eventPayload.get("orderId").asText());
+    }
+
+    @Test
+    void releaseCommandAndEventContainOnlyOrderId() throws Exception {
+        UUID orderId = UUID.fromString("80000000-0000-0000-0000-000000000001");
+        JsonMapper mapper = new JsonMapper();
+
+        var commandPayload = mapper.valueToTree(new ReleaseStockReservationCommand(orderId));
+        var eventPayload = mapper.valueToTree(new StockReservationReleasedEvent(orderId));
 
         assertEquals(1, commandPayload.size());
         assertEquals(1, eventPayload.size());

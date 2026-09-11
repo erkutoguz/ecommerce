@@ -21,4 +21,18 @@ class KafkaTopicResolverTest {
         assertEquals("stock.events",
                 resolver.resolve(OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT));
     }
+
+    @Test
+    void releasedReservationEventRoutesToStockEventsTopic() {
+        KafkaTopicResolver resolver = new KafkaTopicResolver(new KafkaTopicsProperties(
+                "product.events",
+                "stock.commands",
+                "stock.events",
+                "stock.commands.DLT",
+                "product.events.DLT"
+        ));
+
+        assertEquals("stock.events",
+                resolver.resolve(OutboxMessageType.STOCK_RESERVATION_RELEASED_EVENT));
+    }
 }

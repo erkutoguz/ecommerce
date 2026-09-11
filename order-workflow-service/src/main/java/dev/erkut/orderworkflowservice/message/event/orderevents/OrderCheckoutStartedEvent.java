@@ -1,4 +1,6 @@
-package dev.erkut.orderworkflowservice.message.event;
+package dev.erkut.orderworkflowservice.message.event.orderevents;
+
+import dev.erkut.orderworkflowservice.message.event.Currency;
 
 import java.math.BigDecimal;
 import java.util.List;

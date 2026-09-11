@@ -70,7 +70,12 @@ public class OrderService {
             return;
         }
 
-        reject(command.orderId(), command.rejectionReason(), now);
+        Order order = reject(command.orderId(), command.rejectionReason(), now);
+        Cart cart = cartRepository.findById(order.getSourceCartId())
+                .orElseThrow(() -> new CartNotFoundException(
+                        "Cart not found with id: " + order.getSourceCartId()
+                ));
+        cart.reopen(now);
 
         OrderRejectedEvent event = new OrderRejectedEvent(command.orderId());
         outboxService.createOrderRejectedEvent(event, now);

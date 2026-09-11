@@ -1,7 +1,11 @@
 package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.*;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockEventType;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationConfirmedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationFailedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationReleasedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -52,6 +56,15 @@ public class StockEventsListener {
                         consumerUtil.deserialize(envelope.payload(), StockReservationConfirmedEvent.class);
 
                 sagaService.handleStockReservationConfirmedEvent(
+                        envelope,
+                        event
+                );
+            }
+            case STOCK_RESERVATION_RELEASED_EVENT -> {
+                StockReservationReleasedEvent event =
+                        consumerUtil.deserialize(envelope.payload(), StockReservationReleasedEvent.class);
+
+                sagaService.handleStockReservationReleasedEvent(
                         envelope,
                         event
                 );

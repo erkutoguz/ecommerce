@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -45,6 +47,9 @@ class StockServiceIntegrationTest {
 
     @Autowired
     private StockItemRepository stockItemRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void productCreatedCreatesInboxAndZeroedStockItem() {
@@ -138,6 +143,20 @@ class StockServiceIntegrationTest {
         assertThrows(StockItemNotFoundException.class,
                 () -> stockService.handleProductDeactivated(envelope, event));
         assertFalse(inboxRepository.existsById(messageId));
+    }
+
+    @Test
+    void stockItemsRejectReservedQuantityGreaterThanOnHandQuantity() {
+        UUID productId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-01-01T10:00:00Z");
+
+        assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
+                INSERT INTO stock_items (
+                    product_id, on_hand_quantity, reserved_quantity, active, updated_at, created_at
+                ) VALUES (?, 1, 2, true, ?, ?)
+                """, productId, java.sql.Timestamp.from(createdAt), java.sql.Timestamp.from(createdAt)));
+
+        assertFalse(stockItemRepository.existsById(productId));
     }
 
     @Test

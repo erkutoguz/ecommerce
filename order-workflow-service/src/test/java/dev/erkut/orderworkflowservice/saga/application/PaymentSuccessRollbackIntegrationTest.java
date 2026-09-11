@@ -2,7 +2,7 @@ package dev.erkut.orderworkflowservice.saga.application;
 
 import dev.erkut.orderworkflowservice.TestcontainersConfiguration;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.PaymentCompletedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentCompletedEvent;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderworkflowservice.outbox.persistence.OutboxMessageRepository;
 import dev.erkut.orderworkflowservice.saga.domain.Currency;
