@@ -13,6 +13,8 @@ import dev.erkut.paymentservice.provider.payment.stripe.config.StripeProperties;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 @Component
@@ -75,12 +77,17 @@ public class StripePaymentProvider implements PaymentProvider {
                         .setQuantity(1L)
                         .build();
 
+        long expiresAt = Instant.now()
+                .plus(Duration.ofMinutes(properties.checkoutExpirationMinutes()))
+                .getEpochSecond();
+
         SessionCreateParams params =
                 SessionCreateParams.builder()
                         .setMode(SessionCreateParams.Mode.PAYMENT)
                         .setSuccessUrl(properties.successUrl())
                         .setCancelUrl(properties.cancelUrl())
                         .setClientReferenceId(orderId.toString())
+                        .setExpiresAt(expiresAt)
                         .addLineItem(item)
                         .build();
 

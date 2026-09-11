@@ -16,6 +16,10 @@ public class Reservation {
     @Column(name = "order_id")
     private UUID orderId;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 40)
     private ReservationStatus status;
@@ -59,11 +63,21 @@ public class Reservation {
     }
 
     public void markConfirmed() {
-        if(status != ReservationStatus.RESERVED) {
-            throw new ReservationStatusException("Reservation cannot confirm from state: " + status);
-        }
+        ensureReserved();
 
         this.status = ReservationStatus.CONFIRMED;
+    }
+
+    public void releaseStock() {
+        ensureReserved();
+
+        this.status = ReservationStatus.RELEASED;
+    }
+
+    public void ensureReserved() {
+        if (status != ReservationStatus.RESERVED) {
+            throw new ReservationStatusException("Reservation must be reserved but was: " + status);
+        }
     }
 
     public UUID getOrderId() {

@@ -2,6 +2,7 @@ package dev.erkut.stockservice.messaging.kafka.consumer;
 
 import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.message.command.ConfirmStockReservationCommand;
+import dev.erkut.stockservice.message.command.ReleaseStockReservationCommand;
 import dev.erkut.stockservice.message.command.ReserveStockCommand;
 import dev.erkut.stockservice.message.command.StockCommandType;
 import dev.erkut.stockservice.reservation.application.ReservationService;
@@ -42,6 +43,11 @@ public class StockCommandsListener {
                 ConfirmStockReservationCommand command =
                         consumerUtil.deserialize(envelope.payload(), ConfirmStockReservationCommand.class);
                 reservationService.handleConfirmStockReservationCommand(envelope, command);
+            }
+            case RELEASE_STOCK_RESERVATION_COMMAND -> {
+                ReleaseStockReservationCommand command =
+                        consumerUtil.deserialize(envelope.payload(), ReleaseStockReservationCommand.class);
+                reservationService.handleReleaseStockReservationCommand(envelope, command);
             }
 
         }

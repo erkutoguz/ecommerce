@@ -1,4 +1,4 @@
-package dev.erkut.orderworkflowservice.message.event;
+package dev.erkut.orderworkflowservice.message.event.paymentevents;
 
 import java.util.UUID;
 

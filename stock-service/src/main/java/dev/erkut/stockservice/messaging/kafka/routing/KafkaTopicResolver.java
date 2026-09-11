@@ -15,7 +15,10 @@ public class KafkaTopicResolver {
     public String resolve(OutboxMessageType messageType) {
         return switch (messageType) {
 
-            case STOCK_RESERVED_EVENT, STOCK_RESERVATION_FAILED_EVENT, STOCK_RESERVATION_CONFIRMED_EVENT ->
+            case STOCK_RESERVED_EVENT,
+                 STOCK_RESERVATION_FAILED_EVENT,
+                 STOCK_RESERVATION_CONFIRMED_EVENT,
+                 STOCK_RESERVATION_RELEASED_EVENT ->
                     topics.stockEvents();
         };
     }

@@ -127,6 +127,24 @@ public class Payment {
         this.updatedAt = updatedAt;
     }
 
+    public void markFailed(Instant occurredAt, Instant updatedAt) {
+        if (occurredAt == null) {
+            throw new IllegalArgumentException("Occurrence time cannot be null");
+        }
+
+        if (updatedAt == null) {
+            throw new IllegalArgumentException("Update time cannot be null");
+        }
+
+        if (status != PaymentStatus.AWAITING_CUSTOMER_ACTION) {
+            throw new InvalidPaymentStateException("Payment cannot be failed from state: " + status);
+        }
+
+        this.status = PaymentStatus.FAILED;
+        this.processedAt = occurredAt;
+        this.updatedAt = updatedAt;
+    }
+
     public UUID getOrderId() {
         return orderId;
     }

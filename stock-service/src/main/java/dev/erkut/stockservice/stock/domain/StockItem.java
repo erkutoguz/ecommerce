@@ -17,7 +17,7 @@ public class StockItem {
 
     @Version
     @Column(name = "version", nullable = false)
-    private long version;
+    private Long version;
 
     @Column(name = "on_hand_quantity", nullable = false)
     private int onHandQuantity;
@@ -93,6 +93,55 @@ public class StockItem {
         validateReservation(quantity);
         reservedQuantity += quantity;
     }
+
+    public void confirm(int quantity) {
+        validateConfirm(quantity);
+
+        reservedQuantity -= quantity;
+        onHandQuantity -= quantity;
+    }
+
+    public void validateConfirm(int quantity) {
+        validatePositiveQuantity(quantity);
+
+        if (quantity > reservedQuantity) {
+            throw new InsufficientStockException(
+                    "Insufficient reserved stock",
+                    productId
+            );
+        }
+
+        if (quantity > onHandQuantity) {
+            throw new InsufficientStockException(
+                    "Insufficient on-hand stock",
+                    productId
+            );
+        }
+    }
+
+    public void release(int quantity) {
+        validateRelease(quantity);
+
+        reservedQuantity -= quantity;
+    }
+
+    public void validateRelease(int quantity) {
+        validatePositiveQuantity(quantity);
+
+        if (quantity > reservedQuantity) {
+            throw new InsufficientStockException(
+                    "Insufficient reserved stock",
+                    productId
+            );
+        }
+    }
+
+    private void validatePositiveQuantity(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalStateException("Quantity must be greater than zero");
+        }
+    }
+
 
     public boolean isActive() {
         return active;

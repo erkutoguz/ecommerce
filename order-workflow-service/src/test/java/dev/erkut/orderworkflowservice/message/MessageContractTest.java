@@ -1,13 +1,17 @@
 package dev.erkut.orderworkflowservice.message;
 
-import dev.erkut.orderworkflowservice.message.command.ReserveStockCommand;
-import dev.erkut.orderworkflowservice.message.command.ConfirmOrderCommand;
-import dev.erkut.orderworkflowservice.message.command.MarkOrderPaymentCompletedCommand;
-import dev.erkut.orderworkflowservice.message.command.MarkOrderStockReservedCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ReserveStockCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ReleaseStockReservationCommand;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.ConfirmOrderCommand;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.MarkOrderPaymentCompletedCommand;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.MarkOrderStockReservedCommand;
 import dev.erkut.orderworkflowservice.message.event.Currency;
-import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
-import dev.erkut.orderworkflowservice.message.event.OrderConfirmedEvent;
-import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderConfirmedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderRejectedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentFailedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentFailureReason;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationReleasedEvent;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -112,6 +116,22 @@ class MessageContractTest {
         assertMinimalOrderIdPayload(mapper.valueToTree(new MarkOrderPaymentCompletedCommand(ORDER_ID)));
         assertMinimalOrderIdPayload(mapper.valueToTree(new ConfirmOrderCommand(ORDER_ID)));
         assertMinimalOrderIdPayload(mapper.valueToTree(new OrderConfirmedEvent(ORDER_ID)));
+    }
+
+    @Test
+    void compensationContracts_shouldContainCanonicalMinimalPayloads() {
+        JsonMapper mapper = new JsonMapper();
+
+        assertMinimalOrderIdPayload(mapper.valueToTree(
+                new ReleaseStockReservationCommand(ORDER_ID)));
+        assertMinimalOrderIdPayload(mapper.valueToTree(
+                new StockReservationReleasedEvent(ORDER_ID)));
+
+        JsonNode paymentFailurePayload = mapper.valueToTree(
+                new PaymentFailedEvent(ORDER_ID, PaymentFailureReason.SESSION_EXPIRED));
+        assertEquals(2, paymentFailurePayload.size());
+        assertEquals(ORDER_ID.toString(), paymentFailurePayload.get("orderId").asString());
+        assertEquals("SESSION_EXPIRED", paymentFailurePayload.get("failureReason").asString());
     }
 
     private static void assertMinimalOrderIdPayload(JsonNode payload) {

@@ -3,7 +3,7 @@ package dev.erkut.orderworkflowservice.saga.application;
 import dev.erkut.orderworkflowservice.TestcontainersConfiguration;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.event.Currency;
-import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderCheckoutStartedEvent;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderworkflowservice.outbox.persistence.OutboxMessageRepository;
 import org.junit.jupiter.api.BeforeEach;

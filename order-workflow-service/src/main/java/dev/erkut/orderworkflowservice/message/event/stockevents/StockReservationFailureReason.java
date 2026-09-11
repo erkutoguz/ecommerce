@@ -1,4 +1,4 @@
-package dev.erkut.orderworkflowservice.message.event;
+package dev.erkut.orderworkflowservice.message.event.stockevents;
 
 public enum StockReservationFailureReason {
     INSUFFICIENT_STOCK,

@@ -5,7 +5,9 @@ import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.Currency;
 import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
 import dev.erkut.paymentservice.message.event.PaymentCompletedEvent;
+import dev.erkut.paymentservice.message.event.PaymentFailureReason;
 import dev.erkut.paymentservice.outbox.application.OutboxService;
+import dev.erkut.paymentservice.outbox.domain.OutboxMessageType;
 import dev.erkut.paymentservice.outbox.persistence.OutboxMessageRepository;
 import dev.erkut.paymentservice.payment.application.PaymentService;
 import dev.erkut.paymentservice.payment.application.exception.PaymentNotFoundException;
@@ -15,6 +17,8 @@ import dev.erkut.paymentservice.payment.persistence.PaymentRepository;
 import dev.erkut.paymentservice.provider.payment.PaymentProvider;
 import dev.erkut.paymentservice.provider.payment.PaymentSession;
 import dev.erkut.paymentservice.provider.payment.exception.PaymentProviderException;
+import dev.erkut.paymentservice.provider.payment.stripe.StripeWebhookService;
+import com.stripe.net.Webhook;
 import dev.erkut.paymentservice.provider.payment.stripe.inbox.persistence.WebhookEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +42,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -88,6 +93,9 @@ class PaymentServiceApplicationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private StripeWebhookService stripeWebhookService;
 
     @MockitoBean
     private PaymentProvider paymentProvider;
@@ -346,6 +354,115 @@ class PaymentServiceApplicationTests {
                 paymentRepository.findById(orderId).orElseThrow().getStatus());
     }
 
+    @Test
+    void checkoutSessionExpired_shouldFailPaymentAndCreateCanonicalFailureEvent() {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_expired";
+        long eventCreated = 1_700_000_000L;
+        persistAwaitingPayment(orderId, providerPaymentId);
+        String payload = expiredPayload("evt_test_expired", providerPaymentId, eventCreated);
+
+        stripeWebhookService.handle(payload, signature(payload));
+
+        Payment payment = paymentRepository.findById(orderId).orElseThrow();
+        assertEquals(PaymentStatus.FAILED, payment.getStatus());
+        assertEquals(Instant.ofEpochSecond(eventCreated), payment.getProcessedAt());
+        assertEquals(1, webhookEventRepository.count());
+        assertEquals(1, outboxRepository.count());
+
+        var outboxMessage = outboxRepository.findAll().getFirst();
+        assertEquals(OutboxMessageType.PAYMENT_FAILED_EVENT, outboxMessage.getMessageType());
+        assertEquals(orderId, outboxMessage.getAggregateId());
+        assertEquals(2, outboxMessage.getPayload().size());
+        assertEquals(orderId.toString(), outboxMessage.getPayload().get("orderId").asText());
+        assertEquals(PaymentFailureReason.SESSION_EXPIRED.name(),
+                outboxMessage.getPayload().get("failureReason").asText());
+    }
+
+    @Test
+    void checkoutSessionExpired_duplicateWebhookId_shouldBeIdempotent() {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_expired_duplicate";
+        persistAwaitingPayment(orderId, providerPaymentId);
+        String payload = expiredPayload("evt_test_expired_duplicate", providerPaymentId, 1_700_000_001L);
+
+        stripeWebhookService.handle(payload, signature(payload));
+        stripeWebhookService.handle(payload, signature(payload));
+
+        assertEquals(PaymentStatus.FAILED,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(1, webhookEventRepository.count());
+        assertEquals(1, outboxRepository.count());
+    }
+
+    @Test
+    void checkoutSessionExpired_afterCompletedPayment_shouldBeAcceptedAsStaleNoOp() {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_expired_after_completed";
+        persistAwaitingPayment(orderId, providerPaymentId);
+        paymentService.handlePaymentCompleted(
+                "evt_test_completed_before_expiry",
+                "checkout.session.completed",
+                providerPaymentId,
+                OCCURRED_AT
+        );
+
+        String payload = expiredPayload(
+                "evt_test_expired_after_completed",
+                providerPaymentId,
+                1_700_000_002L
+        );
+
+        assertDoesNotThrow(() -> stripeWebhookService.handle(payload, signature(payload)));
+
+        assertEquals(PaymentStatus.COMPLETED,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(2, webhookEventRepository.count());
+        assertEquals(1, outboxRepository.count());
+        assertEquals(0, outboxRepository.findAll().stream()
+                .filter(message -> message.getMessageType() == OutboxMessageType.PAYMENT_FAILED_EVENT)
+                .count());
+    }
+
+    @Test
+    void checkoutSessionExpired_afterFailedPayment_shouldBeAcceptedAsStaleNoOp() {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_expired_after_failed";
+        persistAwaitingPayment(orderId, providerPaymentId);
+        String firstPayload = expiredPayload("evt_test_expired_first", providerPaymentId, 1_700_000_003L);
+        String secondPayload = expiredPayload("evt_test_expired_second", providerPaymentId, 1_700_000_004L);
+
+        stripeWebhookService.handle(firstPayload, signature(firstPayload));
+        stripeWebhookService.handle(secondPayload, signature(secondPayload));
+
+        assertEquals(PaymentStatus.FAILED,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(2, webhookEventRepository.count());
+        assertEquals(1, outboxRepository.count());
+    }
+
+    @Test
+    void checkoutSessionExpired_outboxFailure_shouldRollbackPaymentAndWebhookInbox() {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_expired_outbox_failure";
+        persistAwaitingPayment(orderId, providerPaymentId);
+        doThrow(new IllegalStateException("outbox unavailable"))
+                .when(outboxService)
+                .handlePaymentFailedEvent(any(), any(Instant.class));
+
+        assertThrows(IllegalStateException.class, () -> paymentService.handleCheckoutSessionExpired(
+                "evt_test_expired_outbox_failure",
+                "checkout.session.expired",
+                providerPaymentId,
+                OCCURRED_AT
+        ));
+
+        assertEquals(PaymentStatus.AWAITING_CUSTOMER_ACTION,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(0, webhookEventRepository.count());
+        assertEquals(0, outboxRepository.count());
+    }
+
     private void persistAwaitingPayment(UUID orderId, String providerPaymentId) {
         Payment payment = Payment.create(
                 orderId,
@@ -389,6 +506,36 @@ class PaymentServiceApplicationTests {
                 OCCURRED_AT,
                 jsonMapper.valueToTree(command)
         );
+    }
+
+    private String expiredPayload(String eventId, String providerPaymentId, long eventCreated) {
+        return """
+                {
+                  "id": "%s",
+                  "object": "event",
+                  "api_version": "2026-08-26.dahlia",
+                  "created": %d,
+                  "type": "checkout.session.expired",
+                  "data": {
+                    "object": {
+                      "id": "%s",
+                      "object": "checkout.session"
+                    }
+                  }
+                }
+                """.formatted(eventId, eventCreated, providerPaymentId);
+    }
+
+    private String signature(String payload) {
+        try {
+            return Webhook.Signature.generateSignatureHeader(
+                    payload,
+                    "test-whsec",
+                    Instant.now().getEpochSecond()
+            );
+        } catch (java.security.GeneralSecurityException exception) {
+            throw new IllegalStateException("Unable to generate Stripe webhook signature", exception);
+        }
     }
 
 }

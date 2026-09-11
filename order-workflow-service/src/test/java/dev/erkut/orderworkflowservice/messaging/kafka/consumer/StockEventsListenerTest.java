@@ -1,10 +1,11 @@
 package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.StockReservationFailedEvent;
-import dev.erkut.orderworkflowservice.message.event.StockReservationFailureReason;
-import dev.erkut.orderworkflowservice.message.event.StockReservationConfirmedEvent;
-import dev.erkut.orderworkflowservice.message.event.StockReservedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationFailedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationFailureReason;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationConfirmedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationReleasedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -105,6 +106,27 @@ class StockEventsListenerTest {
         listener.handleStockEvents(envelope);
 
         verify(orderSagaService).handleStockReservationConfirmedEvent(
+                eq(envelope),
+                eventCaptor.capture()
+        );
+        assertEquals(expectedEvent, eventCaptor.getValue());
+    }
+
+    @Test
+    void handleStockEvents_stockReservationReleased_shouldDeserializeAndDelegate() {
+        StockReservationReleasedEvent expectedEvent = new StockReservationReleasedEvent(ORDER_ID);
+        MessageEnvelope envelope = new MessageEnvelope(
+                MESSAGE_ID,
+                "STOCK_RESERVATION_RELEASED_EVENT",
+                OCCURRED_AT,
+                jsonMapper.valueToTree(expectedEvent)
+        );
+        ArgumentCaptor<StockReservationReleasedEvent> eventCaptor =
+                ArgumentCaptor.forClass(StockReservationReleasedEvent.class);
+
+        listener.handleStockEvents(envelope);
+
+        verify(orderSagaService).handleStockReservationReleasedEvent(
                 eq(envelope),
                 eventCaptor.capture()
         );

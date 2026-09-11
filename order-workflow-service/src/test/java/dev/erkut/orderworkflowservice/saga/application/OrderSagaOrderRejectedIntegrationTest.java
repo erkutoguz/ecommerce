@@ -3,7 +3,7 @@ package dev.erkut.orderworkflowservice.saga.application;
 import dev.erkut.orderworkflowservice.TestcontainersConfiguration;
 import dev.erkut.orderworkflowservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderRejectedEvent;
 import dev.erkut.orderworkflowservice.outbox.persistence.OutboxMessageRepository;
 import dev.erkut.orderworkflowservice.saga.application.exception.OrderSagaNotFoundException;
 import dev.erkut.orderworkflowservice.saga.domain.Currency;

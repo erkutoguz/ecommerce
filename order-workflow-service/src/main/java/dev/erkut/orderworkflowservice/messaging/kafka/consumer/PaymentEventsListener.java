@@ -1,10 +1,9 @@
 package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
-import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
-import dev.erkut.orderworkflowservice.message.event.PaymentCompletedEvent;
-import dev.erkut.orderworkflowservice.message.event.PaymentEventType;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentCompletedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentEventType;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentFailedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -38,6 +37,14 @@ public class PaymentEventsListener {
                 PaymentCompletedEvent event =
                         consumerUtil.deserialize(envelope.payload(), PaymentCompletedEvent.class);
                 sagaService.handlePaymentCompletedEvent(
+                        envelope,
+                        event
+                );
+            }
+            case PAYMENT_FAILED_EVENT -> {
+                PaymentFailedEvent event =
+                        consumerUtil.deserialize(envelope.payload(), PaymentFailedEvent.class);
+                sagaService.handlePaymentFailedEvent(
                         envelope,
                         event
                 );

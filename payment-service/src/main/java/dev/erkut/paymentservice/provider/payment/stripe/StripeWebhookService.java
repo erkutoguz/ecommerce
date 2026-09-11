@@ -17,6 +17,8 @@ public class StripeWebhookService {
 
     private static final String CHECKOUT_SESSION_COMPLETED =
             "checkout.session.completed";
+    private static final String CHECKOUT_SESSION_EXPIRED =
+            "checkout.session.expired";
 
     private final StripeProperties properties;
     private final PaymentService paymentService;
@@ -33,9 +35,38 @@ public class StripeWebhookService {
         Event event = verifyAndConstructEvent(payload, signature);
 
         switch (event.getType()) {
-            case CHECKOUT_SESSION_COMPLETED ->
-                    handleCheckoutSessionCompleted(event);
+            case CHECKOUT_SESSION_COMPLETED -> {
+                handleCheckoutSessionCompleted(event);
+            }
+            case CHECKOUT_SESSION_EXPIRED -> {
+                handleCheckoutSessionExpired(event);
+            }
         }
+    }
+
+    private void handleCheckoutSessionExpired(Event event) {
+        StripeObject stripeObject = event
+                .getDataObjectDeserializer()
+                .getObject()
+                .orElseThrow(() ->
+                        new StripeWebhookException("Stripe checkout session could not be deserialized")
+                );
+
+        if (!(stripeObject instanceof Session session)) {
+            throw new StripeWebhookException("Stripe event does not contain a checkout session");
+        }
+
+        String providerPaymentId = session.getId();
+        if (providerPaymentId == null || providerPaymentId.isBlank()) {
+            throw new StripeWebhookException("Stripe checkout session id cannot be blank");
+        }
+
+        paymentService.handleCheckoutSessionExpired(
+                event.getId(),
+                event.getType(),
+                providerPaymentId,
+                Instant.ofEpochSecond(event.getCreated())
+        );
     }
 
     private Event verifyAndConstructEvent(

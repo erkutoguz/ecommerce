@@ -3,10 +3,23 @@ package dev.erkut.orderworkflowservice.saga.application;
 import dev.erkut.orderworkflowservice.inbox.application.InboxService;
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
 import dev.erkut.orderworkflowservice.message.command.*;
-import dev.erkut.orderworkflowservice.message.event.*;
+import dev.erkut.orderworkflowservice.message.command.ordercommands.*;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ConfirmStockReservationCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ReleaseStockReservationCommand;
+import dev.erkut.orderworkflowservice.message.command.stockcommands.ReserveStockCommand;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderConfirmedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderRejectedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentCompletedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentFailedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationConfirmedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationFailedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservationReleasedEvent;
+import dev.erkut.orderworkflowservice.message.event.stockevents.StockReservedEvent;
 import dev.erkut.orderworkflowservice.outbox.application.OutboxService;
 import dev.erkut.orderworkflowservice.saga.application.exception.OrderSagaNotFoundException;
 import dev.erkut.orderworkflowservice.saga.domain.OrderSaga;
+import dev.erkut.orderworkflowservice.saga.domain.OrderSagaFailureReason;
 import dev.erkut.orderworkflowservice.saga.persistence.OrderSagaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -202,6 +215,30 @@ public class OrderSagaService {
     }
 
     @Transactional
+    public void handleStockReservationReleasedEvent(
+            MessageEnvelope envelope,
+            StockReservationReleasedEvent event
+    ) {
+        validateStockEvent(envelope, event);
+
+        Instant now = Instant.now();
+
+        if (isDuplicate(envelope, event.orderId(), now)) {
+            return;
+        }
+
+        OrderSaga orderSaga = orderSagaRepository.findById(event.orderId())
+                .orElseThrow(() -> new OrderSagaNotFoundException(
+                        "Order saga is not found with id: " + event.orderId()
+                ));
+
+        orderSaga.markOrderRejectionPendingAfterStockRelease(now);
+        OrderRejectionReason reason = OrderRejectionReasonMapper.from(orderSaga.getFailureReason());
+        RejectOrderCommand command = new RejectOrderCommand(event.orderId(), reason);
+        outboxService.createRejectOrderCommand(command, now);
+    }
+
+    @Transactional
     public void handleOrderConfirmedEvent(MessageEnvelope envelope, OrderConfirmedEvent event) {
         validateOrderEvent(envelope, event);
         Instant now = Instant.now();
@@ -214,6 +251,26 @@ public class OrderSagaService {
                 .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
 
         orderSaga.markCompleted(now);
+    }
+
+    @Transactional
+    public void handlePaymentFailedEvent(MessageEnvelope envelope, PaymentFailedEvent event) {
+        validatePaymentEvent(envelope, event);
+
+        Instant now = Instant.now();
+
+        if(isDuplicate(envelope, event.orderId(), now)) {
+            return;
+        }
+
+        OrderSaga orderSaga = orderSagaRepository.findById(event.orderId())
+                .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
+
+        OrderSagaFailureReason failureReason = OrderRejectionReasonMapper.from(event.failureReason());
+        orderSaga.markStockReservationReleasePending(now, failureReason);
+
+        ReleaseStockReservationCommand command = new ReleaseStockReservationCommand(event.orderId());
+        outboxService.createReleaseStockReservationCommand(command, now);
     }
 
     private void validateStockEvent(MessageEnvelope envelope, Object event) {

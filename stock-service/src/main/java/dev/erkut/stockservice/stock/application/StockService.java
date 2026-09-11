@@ -4,6 +4,7 @@ import dev.erkut.stockservice.inbox.application.InboxService;
 import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
 import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.stockservice.reservation.domain.ReservationItem;
 import dev.erkut.stockservice.stock.domain.StockItem;
 import dev.erkut.stockservice.stock.domain.exception.StockItemNotFoundException;
 import dev.erkut.stockservice.stock.persistence.StockItemRepository;
@@ -11,9 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -66,6 +67,42 @@ public class StockService {
                 );
 
         item.deactivate();
+    }
+
+    @Transactional
+    public void handleProductConfirm(List<ReservationItem> items) {
+        List<StockItem> stockItems = new ArrayList<>(items.size());
+
+        for (ReservationItem reservationItem : items) {
+            StockItem item = findStockItemById(reservationItem.getProductId())
+                    .orElseThrow(() -> new StockItemNotFoundException(
+                            "Stock item not found with id: " + reservationItem.getProductId()
+                    ));
+            item.validateConfirm(reservationItem.getQuantity());
+            stockItems.add(item);
+        }
+
+        for (int i = 0; i < items.size(); i++) {
+            stockItems.get(i).confirm(items.get(i).getQuantity());
+        }
+    }
+
+    @Transactional
+    public void handleProductRelease(List<ReservationItem> items) {
+        List<StockItem> stockItems = new ArrayList<>(items.size());
+
+        for (ReservationItem reservationItem : items) {
+            StockItem item = findStockItemById(reservationItem.getProductId())
+                    .orElseThrow(() -> new StockItemNotFoundException(
+                            "Stock item not found with id: " + reservationItem.getProductId()
+                    ));
+            item.validateRelease(reservationItem.getQuantity());
+            stockItems.add(item);
+        }
+
+        for (int i = 0; i < items.size(); i++) {
+            stockItems.get(i).release(items.get(i).getQuantity());
+        }
     }
 
     @Transactional(readOnly = true)

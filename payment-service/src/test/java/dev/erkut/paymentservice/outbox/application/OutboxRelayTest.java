@@ -74,4 +74,38 @@ class OutboxRelayTest {
         assertEquals(message.getPayload(), envelope.payload());
         verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
     }
+
+    @Test
+    void relay_shouldPublishPaymentFailedEventToPaymentEventsTopic() {
+        JsonMapper jsonMapper = new JsonMapper();
+        OutboxMessage message = OutboxMessage.create(
+                ORDER_ID,
+                OutboxMessageType.PAYMENT_FAILED_EVENT,
+                jsonMapper.createObjectNode()
+                        .put("orderId", ORDER_ID.toString())
+                        .put("failureReason", "SESSION_EXPIRED"),
+                CREATED_AT
+        );
+        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(messagePublisher.publish(
+                eq("payment.events"),
+                eq(ORDER_ID),
+                any(MessageEnvelope.class)
+        )).thenReturn(CompletableFuture.completedFuture((SendResult<String, Object>) null));
+
+        OutboxRelay relay = new OutboxRelay(
+                messagePublisher,
+                new KafkaTopicResolver(new KafkaTopicsProperties(
+                        "payment.commands",
+                        "payment.events",
+                        "payment.commands.DLT"
+                )),
+                outboxService
+        );
+
+        relay.relay();
+
+        verify(messagePublisher).publish(eq("payment.events"), eq(ORDER_ID), any(MessageEnvelope.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+    }
 }

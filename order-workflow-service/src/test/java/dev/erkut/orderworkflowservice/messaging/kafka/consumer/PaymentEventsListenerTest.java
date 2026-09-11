@@ -1,7 +1,9 @@
 package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.PaymentCompletedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentCompletedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentFailedEvent;
+import dev.erkut.orderworkflowservice.message.event.paymentevents.PaymentFailureReason;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +57,27 @@ class PaymentEventsListenerTest {
         listener.handlePaymentEvents(envelope);
 
         verify(sagaService).handlePaymentCompletedEvent(eq(envelope), eventCaptor.capture());
+        assertEquals(expectedEvent, eventCaptor.getValue());
+    }
+
+    @Test
+    void handlePaymentEvents_paymentFailed_shouldDeserializeAndDelegate() {
+        PaymentFailedEvent expectedEvent = new PaymentFailedEvent(
+                ORDER_ID,
+                PaymentFailureReason.SESSION_EXPIRED
+        );
+        MessageEnvelope envelope = new MessageEnvelope(
+                MESSAGE_ID,
+                "PAYMENT_FAILED_EVENT",
+                OCCURRED_AT,
+                jsonMapper.valueToTree(expectedEvent)
+        );
+        ArgumentCaptor<PaymentFailedEvent> eventCaptor =
+                ArgumentCaptor.forClass(PaymentFailedEvent.class);
+
+        listener.handlePaymentEvents(envelope);
+
+        verify(sagaService).handlePaymentFailedEvent(eq(envelope), eventCaptor.capture());
         assertEquals(expectedEvent, eventCaptor.getValue());
     }
 }

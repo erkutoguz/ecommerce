@@ -1,10 +1,10 @@
 package dev.erkut.orderworkflowservice.messaging.kafka.consumer;
 
 import dev.erkut.orderworkflowservice.message.MessageEnvelope;
-import dev.erkut.orderworkflowservice.message.event.OrderConfirmedEvent;
-import dev.erkut.orderworkflowservice.message.event.OrderEventType;
-import dev.erkut.orderworkflowservice.message.event.OrderCheckoutStartedEvent;
-import dev.erkut.orderworkflowservice.message.event.OrderRejectedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderConfirmedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderEventType;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderCheckoutStartedEvent;
+import dev.erkut.orderworkflowservice.message.event.orderevents.OrderRejectedEvent;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;

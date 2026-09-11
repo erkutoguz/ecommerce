@@ -57,4 +57,8 @@ public class ReservationItem {
     public UUID getProductId() {
         return id.getProductId();
     }
+
+    public int getQuantity() {
+        return quantity;
+    }
 }

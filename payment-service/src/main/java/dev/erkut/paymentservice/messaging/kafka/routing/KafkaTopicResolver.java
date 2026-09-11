@@ -16,9 +16,7 @@ public class KafkaTopicResolver {
     public String resolve(OutboxMessageType messageType) {
         return switch (messageType) {
             case PAYMENT_COMPLETED_EVENT -> topics.paymentEvents();
-            case PAYMENT_FAILED_EVENT -> throw new IllegalArgumentException(
-                    "Payment failed events are outside the current milestone"
-            );
+            case PAYMENT_FAILED_EVENT -> topics.paymentEvents();
         };
     }
 }

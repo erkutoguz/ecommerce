@@ -17,6 +17,8 @@ import org.mockito.ArgumentCaptor;
 
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,6 +26,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -41,7 +44,8 @@ class StripePaymentProviderTest {
             "test-secret",
             "test-whsec",
             "http://localhost:3000/payment/success",
-            "http://localhost:3000/payment/cancel"
+            "http://localhost:3000/payment/cancel",
+            30
     );
 
     @Test
@@ -93,6 +97,16 @@ class StripePaymentProviderTest {
         assertEquals(1L, lineItem.get("quantity"));
         assertEquals("try", priceData.get("currency"));
         assertEquals(12345L, priceData.get("unit_amount"));
+        long expiresAt = ((Number) params.get("expires_at")).longValue();
+        long expectedLowerBound = Instant.now()
+                .plus(Duration.ofMinutes(30))
+                .minusSeconds(2)
+                .getEpochSecond();
+        long expectedUpperBound = Instant.now()
+                .plus(Duration.ofMinutes(30))
+                .plusSeconds(2)
+                .getEpochSecond();
+        assertTrue(expiresAt >= expectedLowerBound && expiresAt <= expectedUpperBound);
         assertEquals("payment-initiation:" + ORDER_ID, requestOptions.getFirst().getIdempotencyKey());
         assertEquals(requestOptions.getFirst().getIdempotencyKey(), requestOptions.getLast().getIdempotencyKey());
     }

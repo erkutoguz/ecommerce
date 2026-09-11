@@ -1,4 +1,4 @@
-package dev.erkut.orderworkflowservice.message.command;
+package dev.erkut.orderworkflowservice.message.command.ordercommands;
 
 import java.util.UUID;
 
