@@ -197,19 +197,195 @@ The next milestones are focused on making the system easier to operate and evalu
 
 A notification service is also planned, but it will remain outside the core Saga so that notification failures cannot roll back a completed order.
 
-## Running Locally
+## Running and Testing Locally
 
-The project is designed to run locally with Docker-based infrastructure.
+The complete development environment can be started with Docker Compose:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-Individual services can also be started separately during development.
+The public API is exposed through the API Gateway:
 
-Stripe integration uses Stripe test mode. Local webhook development requires a valid Stripe test configuration and webhook forwarding.
+```text
+http://localhost:4002
+```
 
-More detailed setup instructions and reproducible API flows are being added as part of the current development milestone.
+Development data is seeded with deterministic customers, products and stock so the checkout flows can be reproduced without manually preparing each service database.
+
+Runtime entities such as carts, orders, stock reservations, payments and Saga instances are not seeded. They are created through the actual application flow.
+
+### Manual API flow
+
+The `api-requests/` directory contains an ordered set of IntelliJ HTTP Client requests for exercising the system.
+
+For the normal checkout flow, run:
+
+```text
+00-health.http
+01-customer.http
+02-products.http
+03-cart.http
+04-checkout.http
+05-order-status.http
+06-payment-checkpoint.http
+07-happy-path-verification.http
+```
+
+The flow uses the seeded customer and an in-stock product:
+
+```text
+Customer
+→ Cart
+→ Add Product
+→ Checkout
+→ Stock Reservation
+→ Payment
+→ Stock Confirmation
+→ Order Confirmation
+→ Cart Completion
+```
+
+Because the workflow is asynchronous, Kafka processing may take a few seconds between checkout and the following verification requests.
+
+### Stripe
+
+Stripe Checkout is used in test mode.
+
+To receive Stripe webhooks locally, start the Stripe CLI:
+
+```bash
+stripe listen --forward-to http://localhost:4002/payments/webhooks/stripe
+```
+
+The webhook signing secret printed by the CLI should be provided through the local Payment Service environment configuration.
+
+No Stripe secrets are stored in the repository.
+
+After checkout, the Payment Service creates a real Stripe Checkout Session. The generated Checkout URL can then be opened and completed using Stripe's test card:
+
+```text
+4242 4242 4242 4242
+```
+
+After the webhook is processed, the expected final state is:
+
+```text
+Payment       COMPLETED
+Reservation   CONFIRMED
+Order         CONFIRMED
+Cart          COMPLETED
+```
+
+For the seeded happy-path product, an order with quantity `2` results in:
+
+```text
+Before checkout:
+onHand   = 100
+reserved = 0
+
+During payment:
+onHand   = 100
+reserved = 2
+
+After confirmation:
+onHand   = 98
+reserved = 0
+```
+
+### Out-of-stock flow
+
+An additional seeded product has zero available stock.
+
+The failure scenario can be exercised with:
+
+```text
+08-out-of-stock-flow.http
+```
+
+Expected result:
+
+```text
+Stock reservation fails
+→ Order REJECTED
+→ Cart ACTIVE
+→ No Payment created
+```
+
+The stock quantities remain unchanged.
+
+### Payment-expiry compensation
+
+A separate customer is available for testing the payment-expiry compensation path:
+
+```text
+09-payment-expiry-flow.http
+```
+
+After checkout, the system reaches:
+
+```text
+Payment       AWAITING_CUSTOMER_ACTION
+Reservation   RESERVED
+```
+
+The corresponding Stripe Checkout Session can then be expired using Stripe's API.
+
+Once the signed Stripe webhook reaches the Payment Service, the system continues asynchronously:
+
+```text
+checkout.session.expired
+→ Payment FAILED
+→ Release Stock Reservation
+→ Order REJECTED
+→ Cart ACTIVE
+→ Saga FAILED
+```
+
+Stock is restored without consuming inventory:
+
+```text
+Before checkout:
+onHand   = 100
+reserved = 0
+
+During payment:
+onHand   = 100
+reserved = 2
+
+After compensation:
+onHand   = 100
+reserved = 0
+```
+
+### Current development data
+
+The local development environment includes:
+
+| Data | Purpose |
+| --- | --- |
+| `customer@example.com` | normal checkout |
+| `out-of-stock@example.com` | stock failure scenario |
+| `payment-expiry@example.com` | payment compensation scenario |
+| Mechanical Keyboard | in-stock product |
+| Wireless Mouse | additional in-stock product |
+| USB-C Dock | out-of-stock product |
+
+The IDs are deterministic and are documented in `api-requests/README.md`.
+
+### Current API limitations
+
+The project intentionally does not expose debugging endpoints solely for testing.
+
+At the moment there are no public read endpoints for Payment, Stock or Saga state. Internal states that cannot be observed through the public API can be inspected through the local development database or service logs.
+
+Authentication, gateway rate limiting, observability and performance testing are part of the next development milestone.
+
+For the complete manual test sequence and development data, see:
+
+```text
+api-requests/README.md
+```
 
 ## Project Direction
 
