@@ -1,0 +1,35 @@
+### Step 8 - Out-of-stock flow
+# Product C has zero stock; checkout must be rejected.
+
+GET {{baseUrl}}/carts/current?customerId={{outOfStockCustomerId}}
+
+> {%
+    client.global.set("outOfStockCartId", response.body.id);
+%}
+
+### Add the out-of-stock product
+POST {{baseUrl}}/carts/{{outOfStockCartId}}/items
+Content-Type: application/json
+
+{
+  "productId": "{{outOfStockProductId}}",
+  "quantity": 1
+}
+
+### Start checkout
+POST {{baseUrl}}/carts/{{outOfStockCartId}}/checkout
+Content-Type: application/json
+
+{
+  "currency": "TRY"
+}
+
+> {%
+    client.global.set("outOfStockOrderId", response.body.orderId);
+%}
+
+### After Kafka: expected REJECTED order
+GET {{baseUrl}}/orders/{{outOfStockOrderId}}
+
+### After Kafka: expected ACTIVE cart
+GET {{baseUrl}}/carts/{{outOfStockCartId}}

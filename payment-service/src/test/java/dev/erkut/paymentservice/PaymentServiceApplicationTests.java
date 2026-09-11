@@ -23,11 +23,14 @@ import dev.erkut.paymentservice.provider.payment.stripe.inbox.persistence.Webhoo
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -52,12 +55,15 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
         "payment.stripe.secret-key=test-secret",
         "payment.stripe.webhook-secret=test-whsec",
         "outbox.relay.enabled=false"
 })
+@AutoConfigureMockMvc
 @Testcontainers
 class PaymentServiceApplicationTests {
 
@@ -96,6 +102,9 @@ class PaymentServiceApplicationTests {
 
     @Autowired
     private StripeWebhookService stripeWebhookService;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @MockitoBean
     private PaymentProvider paymentProvider;
@@ -380,6 +389,46 @@ class PaymentServiceApplicationTests {
     }
 
     @Test
+    void webhookController_shouldProcessSignedCompletedEvent() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_controller_completed";
+        persistAwaitingPayment(orderId, providerPaymentId);
+        String payload = completedPayload("evt_test_controller_completed", providerPaymentId, 1_700_000_010L);
+
+        mockMvc.perform(post("/payments/webhooks/stripe")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Stripe-Signature", signature(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        assertEquals(PaymentStatus.COMPLETED,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(1, webhookEventRepository.count());
+        assertEquals(OutboxMessageType.PAYMENT_COMPLETED_EVENT,
+                outboxRepository.findAll().getFirst().getMessageType());
+    }
+
+    @Test
+    void webhookController_shouldProcessSignedExpiredEvent() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        String providerPaymentId = "cs_test_controller_expired";
+        persistAwaitingPayment(orderId, providerPaymentId);
+        String payload = expiredPayload("evt_test_controller_expired", providerPaymentId, 1_700_000_011L);
+
+        mockMvc.perform(post("/payments/webhooks/stripe")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Stripe-Signature", signature(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        assertEquals(PaymentStatus.FAILED,
+                paymentRepository.findById(orderId).orElseThrow().getStatus());
+        assertEquals(1, webhookEventRepository.count());
+        assertEquals(OutboxMessageType.PAYMENT_FAILED_EVENT,
+                outboxRepository.findAll().getFirst().getMessageType());
+    }
+
+    @Test
     void checkoutSessionExpired_duplicateWebhookId_shouldBeIdempotent() {
         UUID orderId = UUID.randomUUID();
         String providerPaymentId = "cs_test_expired_duplicate";
@@ -520,6 +569,25 @@ class PaymentServiceApplicationTests {
                     "object": {
                       "id": "%s",
                       "object": "checkout.session"
+                    }
+                  }
+                }
+                """.formatted(eventId, eventCreated, providerPaymentId);
+    }
+
+    private String completedPayload(String eventId, String providerPaymentId, long eventCreated) {
+        return """
+                {
+                  "id": "%s",
+                  "object": "event",
+                  "api_version": "2026-08-26.dahlia",
+                  "created": %d,
+                  "type": "checkout.session.completed",
+                  "data": {
+                    "object": {
+                      "id": "%s",
+                      "object": "checkout.session",
+                      "payment_status": "paid"
                     }
                   }
                 }
