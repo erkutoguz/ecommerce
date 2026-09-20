@@ -1,0 +1,19 @@
+POST http://localhost:4002/auth/register
+Content-Type: application/json
+
+{
+  "email": "erkut@mail.com",
+  "password": "test1234"
+}
+
+###
+POST http://localhost:4002/auth/login
+Content-Type: application/json
+
+{
+  "email": "erkut@mail.com",
+  "password": "test1234"
+}
+
+###
+GET http://localhost:4002/products?page=0&size=10

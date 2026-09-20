@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-21 AS builder
+FROM maven:3.9-eclipse-temurin-21 AS BUILDER
 
 WORKDIR /app
 
@@ -13,8 +13,8 @@ WORKDIR /app
 
 RUN mkdir -p /run/secrets/auth-keys
 
-COPY --from=builder /app/target/api-gateway-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=BUILDER /app/target/auth-service-0.0.1-SNAPSHOT.jar app.jar
 
-EXPOSE 4002
+EXPOSE 4008
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

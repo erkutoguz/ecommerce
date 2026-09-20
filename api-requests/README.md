@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - Docker with Compose.
+- Local RSA files at `~/.ecommerce-keys/private.pem` and `~/.ecommerce-keys/public.pem` for Auth Service signing and Gateway verification. The Gateway must receive only the public key.
 - A local Stripe test account and Stripe CLI for payment flows.
 - `payment-service/.env.local` containing runtime-only `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. No secret belongs in this directory.
 - IntelliJ HTTP Client (the files use its response handlers and `http-client.env.json`).
@@ -57,7 +58,9 @@ payment service, and then run the E2E command. Never commit either secret.
 | Product B | `d0000000-0000-0000-0000-000000000002` | Wireless Mouse, TRY 1299.90, stock 50 |
 | Product C | `d0000000-0000-0000-0000-000000000003` | USB-C Dock, TRY 3499.90, stock 0 |
 
-The repository has no authentication/login API or security configuration in this build, so the request flows are unauthenticated.
+## Authentication
+
+Run `Auth.http` to register and log in through the Gateway. The returned access token can be used by authenticated request flows where required. The Gateway validates the token and enforces the configured USER/ADMIN route policy.
 
 ## Happy path
 

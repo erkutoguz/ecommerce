@@ -33,8 +33,9 @@ Business reason: `PAYMENT_EXPIRED`.
 | Order Workflow Service | Order Saga orchestration and compensation | 4004* |
 | Stock Service | Inventory and reservations | 4006 |
 | Payment Service | Stripe Checkout and webhooks | 4007 |
+| Auth Service | Registration, login, and access JWT issuance | 4008* |
 
-`*` Order Workflow Service port is internal to Compose. Kafka is available on `9092`; Kafka UI on `4005`.
+`*` Order Workflow Service and Auth Service ports are internal to Compose. Kafka is available on `9092`; Kafka UI on `4005`.
 
 ## Reliability and Consistency
 
@@ -62,7 +63,14 @@ STRIPE_SECRET_KEY=sk_test_<your-test-key>
 STRIPE_WEBHOOK_SECRET=whsec_<listener-secret>
 ```
 
-Never commit real credentials. Start the stack directly with:
+Create local RSA key files for JWT signing and verification:
+
+```text
+~/.ecommerce-keys/private.pem
+~/.ecommerce-keys/public.pem
+```
+
+The Auth Service reads both keys; the API Gateway receives only `public.pem`. Keep the directory outside the repository and never commit its contents. Never commit real credentials. Start the stack directly with:
 
 ```bash
 docker compose up -d --build
@@ -77,9 +85,24 @@ GET  /carts/current?customerId=...
 POST /carts/{cartId}/checkout
 GET  /orders/{orderId}
 GET  /payments/order/{orderId}
+POST /auth/register
+POST /auth/login
 ```
 
-Authentication is not implemented in the current local build.
+Auth registration and login are served through the Gateway. Registration creates a `USER` account, and login returns a short-lived access JWT.
+
+## Authentication and Gateway Security
+
+The Auth Service uses the configured Spring Security `PasswordEncoder` and issues short-lived RS256 access JWTs with:
+
+- issuer: `ecommerce-auth`
+- audience: `ecommerce-api`
+- subject: AuthUser UUID
+- claims: `iat`, `exp`, `jti`, and `roles`
+
+The Gateway is a stateless Spring Security OAuth2 Resource Server. It validates the RSA signature, RS256 algorithm, timestamp/expiration, issuer, and audience. `USER` and `ADMIN` roles map to `ROLE_USER` and `ROLE_ADMIN`.
+
+Gateway authorization rules allow public registration/login, public product GET requests, and the Stripe webhook from the JWT-authentication perspective. Customer, order, cart, and payment routes require authentication; product mutations require `ADMIN`. Other requests are denied.
 
 ## Stripe Local Webhook
 
@@ -171,6 +194,8 @@ The repository includes:
 - Optimistic-locking and rollback tests
 - Saga compensation tests
 - Stripe webhook signature tests
+- Auth Service PostgreSQL/Flyway integration tests
+- Gateway JWT and authorization integration tests
 - Real Stripe E2E flows
 
 Run the multi-module suite with Docker available for Testcontainers:
@@ -183,7 +208,7 @@ An aggregate test count is intentionally not pinned here because the full suite 
 
 ## Current State
 
-Implemented and locally verified: cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
+Implemented and locally verified: Auth Service registration/login and JWT issuance, Gateway JWT validation and authorization, cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
 
 This is a development/portfolio project, not a production-scale performance claim.
 
@@ -191,10 +216,12 @@ This is a development/portfolio project, not a production-scale performance clai
 
 Not implemented yet:
 
-- Gateway authentication/authorization
+- Resource Server validation inside business services
+- Resource ownership authorization
+- Refresh tokens and explicit token revocation/logout
+- JWKS, key rotation, and MFA
 - Rate limiting
 - Actuator, Micrometer, Prometheus, and Grafana
 - k6 load testing and p95/p99 characterization
 - Multi-instance Outbox publisher claiming/hardening
 - Optional notification service
-

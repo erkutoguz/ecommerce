@@ -47,16 +47,21 @@ services:
       context: ./api-gateway
     ports:
       - 4002:4002
+    volumes:
+      - ${HOME}/.ecommerce-keys/public.pem:/run/secrets/auth-keys/public.pem:ro
     environment:
       ORDER_SERVICE_URL: http://order-service:4000
       CUSTOMER_SERVICE_URL: http://customer-service:4001
       PRODUCT_SERVICE_URL: http://product-service:4003
       PAYMENT_SERVICE_URL: http://payment-service:4007
+      AUTH_SERVICE_URL: http://auth-service:4008
+      JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
     depends_on:
       - customer-service
       - order-service
       - product-service
       - payment-service
+      - auth-service
     networks:
       - app-network
 
@@ -262,6 +267,38 @@ services:
     networks:
       - payment-db-network
 
+  auth-service:
+    build:
+      context: ./auth-service
+    volumes:
+      - ${HOME}/.ecommerce-keys:/run/secrets/auth-keys:ro
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth
+      SPRING_DATASOURCE_USERNAME: auth
+      SPRING_DATASOURCE_PASSWORD: auth-pass
+      JWT_PRIVATE_KEY_PATH: /run/secrets/auth-keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - app-network
+      - auth-db-network
+
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: auth
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth-pass
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U auth -d auth" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - auth-db-network
+
 
 networks:
   app-network:
@@ -282,4 +319,7 @@ networks:
     internal: true
 
   payment-db-network:
+    internal: true
+
+  auth-db-network:
     internal: true
