@@ -14,9 +14,10 @@ require_env STRIPE_SECRET_KEY
 require_payment_env_file
 
 wait_for_gateway
+bootstrap_e2e_customer
 verify_seed_data
 assert_clean_stock
-get_clean_cart "$CUSTOMER_C_ID"
+get_clean_cart "$E2E_CUSTOMER_ID"
 pass "Cart ready"
 add_product_to_cart "$CART_ID" 2
 start_checkout "$CART_ID"

@@ -4,6 +4,7 @@
 
 POST {{baseUrl}}/carts/{{cartId}}/checkout
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
   "currency": "TRY"

@@ -27,5 +27,16 @@ spring:
               predicates:
                 - Path=/payments/**
 
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URL:http://localhost:4008}
+              predicates:
+                - Path=/auth/**
+
 server:
   port: 4002
+
+security:
+  jwt:
+    public-key: file:${JWT_PUBLIC_KEY_PATH}
+    issuer: ecommerce-auth
+    audience: ecommerce-api

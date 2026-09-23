@@ -11,6 +11,8 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
+RUN mkdir -p /run/secrets/auth-keys
+
 COPY --from=builder /app/target/api-gateway-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 4002

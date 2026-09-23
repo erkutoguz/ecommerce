@@ -3,6 +3,8 @@
 # Produces: no variable. Run again after a few seconds if the status is still pending.
 
 GET {{baseUrl}}/orders/{{orderId}}
+Authorization: Bearer {{accessToken}}
 
 ### List this customer's orders
 GET {{baseUrl}}/orders?customerId={{customerId}}&page=0&size=10
+Authorization: Bearer {{accessToken}}

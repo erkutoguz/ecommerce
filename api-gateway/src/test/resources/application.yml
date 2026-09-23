@@ -1,0 +1,12 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes: []
+
+security:
+  jwt:
+    public-key: file:${JWT_PUBLIC_KEY_PATH}
+    issuer: ecommerce-auth
+    audience: ecommerce-api

@@ -18,7 +18,10 @@ public class Customer {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "name", nullable = false, length = 100)
+    @Column(name = "auth_user_id", nullable = false, unique = true)
+    private UUID authUserId;
+
+    @Column(name = "name", length = 100)
     private String name;
 
     @Column(name = "email", nullable = false, length = 255)
@@ -46,29 +49,28 @@ public class Customer {
 
     protected Customer() {}
 
-    private Customer(String name, String email, String phone, Instant now) {
-        if(name == null || name.isBlank()) {
-            throw new IllegalArgumentException("Name cannot be null");
-        }
-
+    private Customer(UUID authUserId, String email, Instant now) {
         if(email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email cannot be null");
+        }
+
+        if(authUserId == null) {
+            throw new IllegalArgumentException("Auth user id cannot be null");
         }
 
         if(now == null) {
             throw new IllegalArgumentException("Creation time cannot be null");
         }
 
-        this.name = name;
+        this.authUserId = authUserId;
         this.email = email.trim().toLowerCase(Locale.ROOT);
-        this.phone = phone;
         this.status = CustomerStatus.ACTIVE;
         this.updatedAt = now;
         this.createdAt = now;
     }
 
-    public static Customer create(String name, String email, String phone, Instant now) {
-        return new Customer(name, email, phone, now);
+    public static Customer create(UUID authUserId, String email, Instant now) {
+        return new Customer(authUserId, email, now);
     }
 
     public CustomerAddress addAddress(String fullAddress, String city, String country, Instant now) {
@@ -130,6 +132,10 @@ public class Customer {
 
     public UUID getId() {
         return id;
+    }
+
+    public UUID getAuthUserId() {
+        return authUserId;
     }
 
     public String getName() {

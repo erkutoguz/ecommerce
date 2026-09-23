@@ -1,8 +1,8 @@
 # Event-Driven E-Commerce Backend
 
-Java 21 / Spring Boot 4.1.1 tabanlı, Kafka ile haberleşen event-driven bir e-commerce backend. Her business service kendi PostgreSQL veritabanına sahiptir.
+Java 21 and Spring Boot 4.1.1 based event-driven e-commerce backend. Each business service owns its own PostgreSQL database and communicates through the API Gateway and Kafka.
 
-Projenin odağı; transactional Outbox/Inbox, idempotency, optimistic locking, Saga orchestration, Stripe Checkout ve compensation tabanlı failure handling'dir. Core commerce workflow gerçek Stripe Checkout ile local ortamda uçtan uca doğrulanmıştır.
+The project demonstrates transactional Outbox/Inbox messaging, idempotent consumption, optimistic locking, Saga orchestration, Stripe Checkout, and compensation-based failure handling. The main commerce workflows are validated locally with integration tests and repeatable E2E scripts.
 
 ## Business Flow
 
@@ -22,6 +22,14 @@ Stripe Checkout expires
 
 Business reason: `PAYMENT_EXPIRED`.
 
+Out-of-stock compensation:
+
+```text
+Stock reservation fails
+  → Order REJECTED / OUT_OF_STOCK
+  → Cart ACTIVE → Saga FAILED
+```
+
 ## Services
 
 | Service | Responsibility | Port |
@@ -33,19 +41,63 @@ Business reason: `PAYMENT_EXPIRED`.
 | Order Workflow Service | Order Saga orchestration and compensation | 4004* |
 | Stock Service | Inventory and reservations | 4006 |
 | Payment Service | Stripe Checkout and webhooks | 4007 |
+| Auth Service | Registration, login, and access JWT issuance | 4008* |
 
-`*` Order Workflow Service port is internal to Compose. Kafka is available on `9092`; Kafka UI on `4005`.
+`*` Order Workflow Service and Auth Service ports are internal to Compose. Kafka is available on `9092`; Kafka UI on `4005`.
 
 ## Reliability and Consistency
 
 - Database-per-service with Flyway-owned schemas.
 - Transactional Outbox and consumer Inbox for reliable, idempotent messaging.
 - Kafka consumers designed for at-least-once delivery.
+- AuthUser creation and the corresponding Customer command are committed atomically in Auth Service.
+- Customer provisioning uses Inbox deduplication and `UNIQUE(auth_user_id)` business protection.
 - Saga orchestration with compensation instead of distributed rollback.
 - Optimistic locking for carts, stock, reservations, and Saga state.
 - Stock validates all requested items before mutating inventory.
 - Stripe Checkout creation uses an order-based idempotency key.
 - Stripe webhooks verify the `Stripe-Signature` header.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Client --> Gateway[API Gateway]
+    Gateway --> Auth[Auth Service]
+    Gateway --> Customer[Customer Service]
+    Gateway --> Product[Product Service]
+    Gateway --> Order[Order Service]
+    Gateway --> Payment[Payment Service]
+
+    Auth -->|customer.commands| Kafka[(Kafka)]
+    Kafka --> Customer
+    Order -->|order.events| Workflow[Order Workflow Service]
+    Workflow -->|stock.commands| Stock[Stock Service]
+    Workflow -->|payment.commands| Payment
+    Stock -->|stock.events| Kafka
+    Payment -->|payment.events| Kafka
+    Product -->|product.events| Kafka
+```
+
+The API Gateway is the public HTTP entry point. Kafka uses at-least-once delivery semantics; consumers are responsible for idempotent processing.
+
+## Auth → Customer Provisioning
+
+Customer creation is initiated by successful Auth registration, not by a public `POST /customers` endpoint:
+
+```text
+POST /auth/register
+        ↓
+AuthUser + CREATE_CUSTOMER_COMMAND Outbox in one transaction
+        ↓
+Auth Outbox relay → Kafka customer.commands
+        ↓
+Customer consumer → Inbox deduplication
+        ↓
+Customer persisted asynchronously
+```
+
+`AuthUser.id` and `Customer.id` are separate service-owned identities. Customer Service generates its own Customer UUID and stores the Auth identity as `Customer.authUserId`, which is unique.
 
 ## Technology
 
@@ -53,7 +105,7 @@ Java 21 · Spring Boot 4.1.1 · Spring Cloud Gateway WebMVC · Spring Kafka · S
 
 ## Run Locally
 
-Prerequisites: Docker Compose, Maven, `make`, `curl`, `jq`, Stripe CLI, and macOS `open` for the happy-path browser step.
+Basic prerequisites: Docker Compose, Maven, `make`, `curl`, and `jq`. Stripe CLI and macOS `open` are additionally required only for the Stripe-dependent E2E flows.
 
 Create the uncommitted `payment-service/.env.local` file:
 
@@ -62,11 +114,22 @@ STRIPE_SECRET_KEY=sk_test_<your-test-key>
 STRIPE_WEBHOOK_SECRET=whsec_<listener-secret>
 ```
 
-Never commit real credentials. Start the stack directly with:
+Create local RSA key files for JWT signing and verification:
+
+```text
+~/.ecommerce-keys/private.pem
+~/.ecommerce-keys/public.pem
+```
+
+The Auth Service reads both keys; the API Gateway receives only `public.pem`. Keep the directory outside the repository and never commit its contents. Never commit real credentials. Start the stack directly with:
 
 ```bash
 docker compose up -d --build
 ```
+
+Compose first waits for Kafka to accept admin requests, then `kafka-init` creates and verifies all application topics with their configured partition counts. Kafka broker and consumer topic auto-creation are disabled; Kafka-dependent services start only after `kafka-init` exits successfully.
+
+Kafka topic provisioning is infrastructure-owned. The Compose `kafka-init` one-shot service runs [`infrastructure/kafka/init-topics.sh`](infrastructure/kafka/init-topics.sh), creates and verifies the application topics, and exits before Kafka-dependent services start. Application services do not rely on broker auto-creation or create the Compose topology through KafkaAdmin.
 
 The Gateway is available at `http://localhost:4002`. Common routes are:
 
@@ -77,13 +140,44 @@ GET  /carts/current?customerId=...
 POST /carts/{cartId}/checkout
 GET  /orders/{orderId}
 GET  /payments/order/{orderId}
+POST /auth/register
+POST /auth/login
 ```
 
-Authentication is not implemented in the current local build.
+Auth registration and login are served through the Gateway. Registration creates a `USER` account, and login returns a short-lived access JWT.
+
+## Authentication and Gateway Security
+
+The Auth Service uses the configured Spring Security `PasswordEncoder` and issues short-lived RS256 access JWTs with:
+
+- issuer: `ecommerce-auth`
+- audience: `ecommerce-api`
+- subject: AuthUser UUID
+- claims: `iat`, `exp`, `jti`, and `roles`
+
+The Gateway is a stateless Spring Security OAuth2 Resource Server. It validates the RSA signature, RS256 algorithm, timestamp/expiration, issuer, and audience. `USER` and `ADMIN` roles map to `ROLE_USER` and `ROLE_ADMIN`.
+
+Gateway authorization rules allow public registration/login, public product GET requests, and the Stripe webhook from the JWT-authentication perspective. Customer, order, cart, and payment routes require authentication; product mutations require `ADMIN`. Other requests are denied.
+
+Business services are not yet independent JWT Resource Servers and resource-level ownership checks are not implemented. Those are planned follow-up work; the current Gateway protects the public HTTP surface.
+
+## Kafka Topology
+
+The primary application topics are:
+
+| Topic | Purpose |
+| --- | --- |
+| `customer.commands` | Auth-driven Customer provisioning commands |
+| `product.events` | Product catalog events consumed by Stock Service |
+| `order.commands` / `order.events` | Order commands and lifecycle events |
+| `stock.commands` / `stock.events` | Stock reservation commands and results |
+| `payment.commands` / `payment.events` | Payment commands and results |
+
+Consumer flows have corresponding `.DLT` topics. The local Compose broker uses three partitions and replication factor one for the current application topology.
 
 ## Stripe Local Webhook
 
-Run this in a separate terminal:
+The Payment Service itself can start with the Compose stack, but payment completion and expiry E2E scenarios require Stripe test-mode credentials and a local webhook listener. Run this in a separate terminal:
 
 ```bash
 make stripe-listen
@@ -99,7 +193,15 @@ Copy the printed `whsec_...` into `payment-service/.env.local` as `STRIPE_WEBHOO
 
 ## End-to-End Testing
 
-The scripts call the Gateway, poll asynchronous Kafka-driven state, and use read-only development DB queries only for internal states that have no public endpoint. They do not expose `provider_payment_id` through production APIs.
+The scripts call the Gateway, create a unique Auth user, log in, capture a JWT, poll asynchronous Customer provisioning, and use the resulting Customer ID for authenticated commerce requests. They use read-only development DB queries only for internal states that have no public endpoint. They do not expose `provider_payment_id` through production APIs.
+
+The reusable bootstrap is:
+
+```text
+unique email → register → login → JWT
+    → poll Customer by email → capture customerId
+    → authenticated commerce flow
+```
 
 ### Reset
 
@@ -107,7 +209,27 @@ The scripts call the Gateway, poll asynchronous Kafka-driven state, and use read
 make e2e-reset
 ```
 
-This removes local Compose volumes, rebuilds services, runs Flyway migrations, verifies deterministic seed data, and waits for readiness. Use it before a new scenario or after a dirty/partial flow.
+This removes local Compose volumes, rebuilds services, runs Flyway migrations, verifies deterministic Product/stock seed data, and waits for public Gateway readiness. Use it before a new scenario or after a dirty/partial flow. Customer records are created asynchronously from Auth registration and are not required as seeded E2E data.
+
+### Auth → Customer bootstrap
+
+To verify registration, login, Kafka delivery, and Customer provisioning without Stripe:
+
+```bash
+bash -lc 'source scripts/e2e/common.sh && wait_for_gateway && bootstrap_e2e_customer'
+```
+
+### Out-of-stock flow
+
+The authenticated out-of-stock flow does not require Stripe. It verifies:
+
+```text
+Order REJECTED / OUT_OF_STOCK
+Cart ACTIVE
+Saga FAILED
+```
+
+The request sequence is documented in [`api-requests/README.md`](api-requests/README.md) and the requests are in `api-requests/08-out-of-stock-flow.http`.
 
 ### Happy path
 
@@ -117,7 +239,7 @@ With the Stripe listener running:
 make e2e-happy
 ```
 
-The script creates the seeded cart and checkout, waits for the payment and Checkout URL, opens the hosted Stripe page, and verifies the final states. The only manual step is completing payment with test card `4242 4242 4242 4242`, any future expiry, and any CVC; then press ENTER.
+The script registers a unique Auth user, logs in through the Gateway, polls until the Customer is provisioned, and then creates the cart and checkout with the JWT. It waits for the payment and Checkout URL, opens the hosted Stripe page, and verifies the final states. The only manual step is completing payment with test card `4242 4242 4242 4242`, any future expiry, and any CVC; then press ENTER.
 
 Expected result for Product A quantity `2`:
 
@@ -132,7 +254,7 @@ Stock         onHand=98 reserved=0
 
 ### Payment expiry
 
-This flow is fully automated:
+With the Stripe listener running and `STRIPE_SECRET_KEY` exported, this flow is automated after checkout creation:
 
 ```bash
 make e2e-reset
@@ -171,6 +293,8 @@ The repository includes:
 - Optimistic-locking and rollback tests
 - Saga compensation tests
 - Stripe webhook signature tests
+- Auth Service PostgreSQL/Flyway integration tests
+- Gateway JWT and authorization integration tests
 - Real Stripe E2E flows
 
 Run the multi-module suite with Docker available for Testcontainers:
@@ -179,11 +303,9 @@ Run the multi-module suite with Docker available for Testcontainers:
 mvn test
 ```
 
-An aggregate test count is intentionally not pinned here because the full suite was not re-run after the latest signed webhook additions.
-
 ## Current State
 
-Implemented and locally verified: cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
+Implemented and locally verified: Auth Service registration/login and JWT issuance, transactional Auth Outbox, asynchronous Customer provisioning with Inbox idempotency, deterministic Kafka topic initialization, Gateway JWT validation and authorization, cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
 
 This is a development/portfolio project, not a production-scale performance claim.
 
@@ -191,10 +313,12 @@ This is a development/portfolio project, not a production-scale performance clai
 
 Not implemented yet:
 
-- Gateway authentication/authorization
+- Resource Server validation inside business services
+- Resource ownership authorization
+- Refresh tokens and explicit token revocation/logout
+- JWKS, key rotation, and MFA
 - Rate limiting
 - Actuator, Micrometer, Prometheus, and Grafana
 - k6 load testing and p95/p99 characterization
 - Multi-instance Outbox publisher claiming/hardening
 - Optional notification service
-

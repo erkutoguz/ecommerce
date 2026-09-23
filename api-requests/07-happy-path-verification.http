@@ -3,5 +3,7 @@
 # Produces: order CONFIRMED and source cart COMPLETED.
 
 GET {{baseUrl}}/orders/{{orderId}}
+Authorization: Bearer {{accessToken}}
 
 GET {{baseUrl}}/carts/{{cartId}}
+Authorization: Bearer {{accessToken}}

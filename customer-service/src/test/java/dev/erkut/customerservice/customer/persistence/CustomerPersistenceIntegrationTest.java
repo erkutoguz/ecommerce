@@ -1,11 +1,12 @@
 package dev.erkut.customerservice.customer.persistence;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
-import dev.erkut.customerservice.customer.api.request.CustomerCreateRequest;
 import dev.erkut.customerservice.customer.domain.Customer;
 import dev.erkut.customerservice.customer.domain.CustomerStatus;
 import dev.erkut.customerservice.customer.application.CustomerService;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
+import dev.erkut.customerservice.message.MessageEnvelope;
+import dev.erkut.customerservice.message.command.CreateCustomerCommand;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
@@ -51,26 +53,28 @@ class CustomerPersistenceIntegrationTest {
 
     @Test
     void aggregateAddressLifecycleUsesCascadeAndOrphanRemoval() {
-        var customer = customerService.createCustomer(new CustomerCreateRequest(
-                "Persistence Test", uniqueEmail("persistence"), null));
+        UUID authUserId = UUID.randomUUID();
+        String email = uniqueEmail("persistence");
+        provisionCustomer(authUserId, UUID.randomUUID(), email);
+        var customer = customerRepository.findByAuthUserId(authUserId).orElseThrow();
 
-        var address = customerService.addCustomerAddress(customer.customerId(),
+        var address = customerService.addCustomerAddress(customer.getId(),
                 new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom"));
         customerRepository.flush();
 
-        assertNotNull(customer.customerId());
+        assertNotNull(customer.getId());
         assertNotNull(address.customerAddressId());
-        assertEquals(1, countAddresses(customer.customerId()));
+        assertEquals(1, countAddresses(customer.getId()));
 
-        customerService.removeCustomerAddress(customer.customerId(), address.customerAddressId());
+        customerService.removeCustomerAddress(customer.getId(), address.customerAddressId());
         customerRepository.flush();
 
-        assertEquals(0, countAddresses(customer.customerId()));
+        assertEquals(0, countAddresses(customer.getId()));
     }
 
     @Test
     void dirtyCheckingPersistsDeactivationAndUpdatedAtWithoutExplicitSave() {
-        var created = Customer.create("Dirty Checking Test", uniqueEmail("dirty"), null, CREATED_AT);
+        var created = Customer.create(UUID.randomUUID(), uniqueEmail("dirty"), CREATED_AT);
         customerRepository.save(created);
         customerRepository.flush();
 
@@ -86,22 +90,76 @@ class CustomerPersistenceIntegrationTest {
 
     @Test
     void inactiveCustomerCannotAddOrRemoveAddress() {
-        var customer = customerService.createCustomer(new CustomerCreateRequest(
-                "Inactive Test", uniqueEmail("inactive"), null));
-        var address = customerService.addCustomerAddress(customer.customerId(),
+        UUID authUserId = UUID.randomUUID();
+        provisionCustomer(authUserId, UUID.randomUUID(), uniqueEmail("inactive"));
+        var customer = customerRepository.findByAuthUserId(authUserId).orElseThrow();
+        var address = customerService.addCustomerAddress(customer.getId(),
                 new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom"));
-        customerService.deactivateCustomer(customer.customerId());
+        customerService.deactivateCustomer(customer.getId());
 
         assertThrows(InvalidCustomerStateException.class, () -> customerService.addCustomerAddress(
-                customer.customerId(), new CustomerAddressCreateRequest(
+                customer.getId(), new CustomerAddressCreateRequest(
                         "2 Main Street", "London", "United Kingdom")));
         assertThrows(InvalidCustomerStateException.class, () -> customerService.removeCustomerAddress(
-                customer.customerId(), address.customerAddressId()));
+                customer.getId(), address.customerAddressId()));
+    }
+
+    @Test
+    void provisioningCreatesInboxAndIndependentCustomerIdentity() {
+        UUID authUserId = UUID.randomUUID();
+        provisionCustomer(authUserId, UUID.randomUUID(), uniqueEmail("provisioned"));
+
+        var customer = customerRepository.findByAuthUserId(authUserId).orElseThrow();
+
+        assertNotNull(customer.getId());
+        assertNotEquals(authUserId, customer.getId());
+        assertEquals(authUserId, customer.getAuthUserId());
+        assertEquals(CustomerStatus.ACTIVE, customer.getStatus());
+        assertEquals(null, customer.getName());
+        assertEquals(null, customer.getPhone());
+        assertEquals(1, countInboxMessages());
+    }
+
+    @Test
+    void sameMessageIdIsProcessedOnlyOnce() {
+        UUID authUserId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        String email = uniqueEmail("duplicate-message");
+        provisionCustomer(authUserId, messageId, email);
+        provisionCustomer(authUserId, messageId, email);
+
+        assertEquals(1, countCustomersForAuthUser(authUserId));
+        assertEquals(1, countInboxMessages());
+    }
+
+    @Test
+    void differentMessageIdForExistingAuthUserIsNoOp() {
+        UUID authUserId = UUID.randomUUID();
+        provisionCustomer(authUserId, UUID.randomUUID(), uniqueEmail("duplicate-auth-user"));
+        provisionCustomer(authUserId, UUID.randomUUID(), uniqueEmail("duplicate-auth-user-replay"));
+
+        assertEquals(1, countCustomersForAuthUser(authUserId));
+        assertEquals(2, countInboxMessages());
     }
 
     private int countAddresses(UUID customerId) {
         return jdbcTemplate.queryForObject(
                 "select count(*) from customer_addresses where customer_id = ?", Integer.class, customerId);
+    }
+
+    private int countInboxMessages() {
+        return jdbcTemplate.queryForObject("select count(*) from inbox_messages", Integer.class);
+    }
+
+    private int countCustomersForAuthUser(UUID authUserId) {
+        return jdbcTemplate.queryForObject(
+                "select count(*) from customers where auth_user_id = ?", Integer.class, authUserId);
+    }
+
+    private void provisionCustomer(UUID authUserId, UUID messageId, String email) {
+        customerService.handleCreateCustomerCommand(
+                new MessageEnvelope(messageId, "CREATE_CUSTOMER_COMMAND", CREATED_AT, null),
+                new CreateCustomerCommand(authUserId, email));
     }
 
     private static String uniqueEmail(String prefix) {

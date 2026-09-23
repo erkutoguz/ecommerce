@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - Docker with Compose.
+- Local RSA files at `~/.ecommerce-keys/private.pem` and `~/.ecommerce-keys/public.pem` for Auth Service signing and Gateway verification. The Gateway must receive only the public key.
 - A local Stripe test account and Stripe CLI for payment flows.
 - `payment-service/.env.local` containing runtime-only `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. No secret belongs in this directory.
 - IntelliJ HTTP Client (the files use its response handlers and `http-client.env.json`).
@@ -15,7 +16,7 @@ From the repository root:
 docker compose up -d --build
 ```
 
-Wait until `docker compose ps` shows the application containers as running. The gateway is `http://localhost:4002`. The compose `stock-service` uses the `dev` profile to load the idempotent stock prerequisite SQL. For a clean repeatable run:
+Compose waits for Kafka readiness and the one-shot `kafka-init` service before starting Kafka-dependent applications. `kafka-init` creates and verifies the application topics; application and broker topic auto-creation are disabled. Wait until `docker compose ps` shows `kafka-init` exited with code 0 and the application containers as running. The gateway is `http://localhost:4002`. The compose `stock-service` uses the `dev` profile to load the idempotent stock prerequisite SQL. For a clean repeatable run:
 
 ```bash
 docker compose down -v
@@ -50,29 +51,29 @@ payment service, and then run the E2E command. Never commit either secret.
 
 | Entity | ID / email | Important values |
 | --- | --- | --- |
-| Customer A | `c0000000-0000-0000-0000-000000000001` / `customer@example.com` | active, happy path |
-| Customer B | `c0000000-0000-0000-0000-000000000002` / `out-of-stock@example.com` | active, out-of-stock flow |
-| Customer C | `c0000000-0000-0000-0000-000000000003` / `payment-expiry@example.com` | active, expiry flow |
 | Product A | `d0000000-0000-0000-0000-000000000001` | Mechanical Keyboard, TRY 2499.90, stock 100 |
 | Product B | `d0000000-0000-0000-0000-000000000002` | Wireless Mouse, TRY 1299.90, stock 50 |
 | Product C | `d0000000-0000-0000-0000-000000000003` | USB-C Dock, TRY 3499.90, stock 0 |
 
-The repository has no authentication/login API or security configuration in this build, so the request flows are unauthenticated.
+## Authentication
+
+Run `Auth.http` to register and log in through the Gateway. Registration provisions a Customer asynchronously through Kafka. Repeat the authenticated Customer lookup in `Auth.http` until the registered email appears, then use its `customerId` in the remaining requests. The Gateway validates the token and enforces the configured USER/ADMIN route policy.
 
 ## Happy path
 
 Run the files in this order:
 
 1. `00-health.http`
-2. `01-customer.http`
-3. `02-products.http`
-4. `03-cart.http`
-5. `04-checkout.http`
-6. Wait a few seconds for asynchronous payment creation.
-7. `05-order-status.http`
-8. `06-payment-checkpoint.http`
-9. Open the captured `checkoutUrl` in a browser and complete Stripe Checkout manually.
-10. `07-happy-path-verification.http`
+2. `Auth.http` (register, login, and poll Customer provisioning)
+3. `01-customer.http`
+4. `02-products.http`
+5. `03-cart.http`
+6. `04-checkout.http`
+7. Wait a few seconds for asynchronous payment creation.
+8. `05-order-status.http`
+9. `06-payment-checkpoint.http`
+10. Open the captured `checkoutUrl` in a browser and complete Stripe Checkout manually.
+11. `07-happy-path-verification.http`
 
 Checkout immediately returns an `OrderResponse` and captures `orderId`. Stock reservation, payment creation, and later order/cart transitions are asynchronous; re-run status requests after Kafka has processed the events.
 
@@ -88,11 +89,11 @@ After checkout, wait a few seconds and run `06-payment-checkpoint.http`. It call
 
 ## Out-of-stock flow
 
-Run `08-out-of-stock-flow.http` after steps 0-2. After Kafka processing, expect `OrderStatus.REJECTED` with `OUT_OF_STOCK` and `CartStatus.ACTIVE` (cart reopened). No Stripe payment should be created for this order.
+Run `Auth.http` and `01-customer.http` first, then run `08-out-of-stock-flow.http`. After Kafka processing, expect `OrderStatus.REJECTED` with `OUT_OF_STOCK` and `CartStatus.ACTIVE` (cart reopened). No Stripe payment should be created for this order.
 
 ## Payment expiry flow
 
-Run `09-payment-expiry-flow.http`, wait for its payment checkpoint to return `AWAITING_CUSTOMER_ACTION`, then query the resulting `provider_payment_id` through the documented development-only DB path and expire the still-open Checkout Session using Stripe’s supported API operation:
+Run `Auth.http` and `01-customer.http` first, then run `09-payment-expiry-flow.http`. Wait for its payment checkpoint to return `AWAITING_CUSTOMER_ACTION`, then query the resulting `provider_payment_id` through the documented development-only DB path and expire the still-open Checkout Session using Stripe’s supported API operation:
 
 ```bash
 curl -X POST "https://api.stripe.com/v1/checkout/sessions/<provider_payment_id>/expire" \

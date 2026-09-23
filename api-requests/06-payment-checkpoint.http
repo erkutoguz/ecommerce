@@ -4,6 +4,7 @@
 # Produces: checkoutUrl captured from the persisted Payment response.
 
 GET {{baseUrl}}/payments/order/{{orderId}}
+Authorization: Bearer {{accessToken}}
 
 > {%
     client.test("payment checkpoint is available", function () {

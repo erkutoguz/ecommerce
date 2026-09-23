@@ -2,7 +2,6 @@ package dev.erkut.customerservice.customer.api;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
-import dev.erkut.customerservice.customer.api.request.CustomerCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerResponse;
 import dev.erkut.customerservice.customer.application.CustomerService;
 import jakarta.validation.Valid;
@@ -22,12 +21,6 @@ public class CustomerController {
 
     public CustomerController(CustomerService customerService) {
         this.customerService = customerService;
-    }
-
-    @PostMapping
-    public ResponseEntity<CustomerResponse> createCustomer(@Valid @RequestBody CustomerCreateRequest req) {
-        CustomerResponse response = customerService.createCustomer(req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{customerId}")

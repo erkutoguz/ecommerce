@@ -1,0 +1,42 @@
+> {%
+    client.global.set("testEmail", "e2e-" + Date.now() + "@example.com");
+    client.global.set("testPassword", "E2eTestPassword123!");
+%}
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+###
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+> {%
+    client.test("login succeeds", function () {
+        client.assert(response.status === 200, "Expected 200 from login");
+        client.assert(response.body.accessToken != null, "Access token must be present");
+    });
+    client.global.set("accessToken", response.body.accessToken);
+%}
+
+### Customer provisioning is asynchronous. Repeat this request until the registered email appears.
+GET {{baseUrl}}/customers?page=0&size=100
+Authorization: Bearer {{accessToken}}
+
+> {%
+    const customer = response.body.content.find(item => item.email === client.global.get("testEmail"));
+    if (customer != null) {
+        client.global.set("customerId", customer.customerId);
+    }
+%}
+
+###
+GET {{baseUrl}}/products?page=0&size=10

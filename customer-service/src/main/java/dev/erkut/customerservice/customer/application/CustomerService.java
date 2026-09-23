@@ -2,13 +2,15 @@ package dev.erkut.customerservice.customer.application;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
-import dev.erkut.customerservice.customer.api.request.CustomerCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerResponse;
 import dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.customer.api.CustomerMapper;
 import dev.erkut.customerservice.customer.domain.Customer;
 import dev.erkut.customerservice.customer.domain.CustomerAddress;
+import dev.erkut.customerservice.inbox.application.InboxService;
+import dev.erkut.customerservice.message.MessageEnvelope;
+import dev.erkut.customerservice.message.command.CreateCustomerCommand;
 import dev.erkut.customerservice.customer.persistence.CustomerRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,22 +26,35 @@ import java.util.UUID;
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
-
-    public CustomerService(CustomerRepository customerRepository) {
+    private final InboxService inboxService;
+    public CustomerService(
+            CustomerRepository customerRepository,
+            InboxService inboxService
+    ) {
         this.customerRepository = customerRepository;
+        this.inboxService = inboxService;
     }
 
     @Transactional
-    public CustomerResponse createCustomer(CustomerCreateRequest req) {
+    public void handleCreateCustomerCommand(MessageEnvelope envelope, CreateCustomerCommand command) {
+        validateCustomerCommand(envelope, command);
         Instant now = Instant.now();
-        Customer customer = Customer.create(req.name(), req.email(), req.phone(), now);
+
+        if (isDuplicate(envelope, command.authUserId(), now)) {
+            return;
+        }
+
+        if (customerRepository.existsByAuthUserId(command.authUserId())) {
+            return;
+        }
+
+        Customer customer = Customer.create(command.authUserId(), command.email(), now);
 
         if(customerRepository.existsByEmail(customer.getEmail())) {
             throw new CustomerEmailAlreadyExistsException("Customer already exists with email: " + customer.getEmail());
         }
 
-        Customer savedCustomer = customerRepository.save(customer);
-        return CustomerMapper.toResponse(savedCustomer);
+        customerRepository.save(customer);
     }
 
     @Transactional(readOnly = true)
@@ -83,5 +98,27 @@ public class CustomerService {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
         customer.removeAddress(addressId, Instant.now());
+    }
+
+    private void validateCustomerCommand(MessageEnvelope envelope, Object event) {
+        if (envelope == null) {
+            throw new IllegalArgumentException("Message envelope cannot be null");
+        }
+        if (event == null) {
+            throw new IllegalArgumentException("Customer command cannot be null");
+        }
+    }
+
+    private boolean isDuplicate(
+            MessageEnvelope envelope,
+            UUID authUserId,
+            Instant now
+    ) {
+        return !inboxService.tryRegister(
+                envelope.messageId(),
+                envelope.messageType(),
+                authUserId,
+                now
+        );
     }
 }
