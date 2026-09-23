@@ -76,6 +76,8 @@ The Auth Service reads both keys; the API Gateway receives only `public.pem`. Ke
 docker compose up -d --build
 ```
 
+Compose first waits for Kafka to accept admin requests, then `kafka-init` creates and verifies all application topics with their configured partition counts. Kafka broker and consumer topic auto-creation are disabled; Kafka-dependent services start only after `kafka-init` exits successfully.
+
 The Gateway is available at `http://localhost:4002`. Common routes are:
 
 ```text
@@ -130,7 +132,7 @@ The scripts call the Gateway, poll asynchronous Kafka-driven state, and use read
 make e2e-reset
 ```
 
-This removes local Compose volumes, rebuilds services, runs Flyway migrations, verifies deterministic seed data, and waits for readiness. Use it before a new scenario or after a dirty/partial flow.
+This removes local Compose volumes, rebuilds services, runs Flyway migrations, verifies deterministic Product/stock seed data, and waits for public Gateway readiness. Use it before a new scenario or after a dirty/partial flow. Customer records are created asynchronously from Auth registration and are not required as seeded E2E data.
 
 ### Happy path
 
@@ -140,7 +142,7 @@ With the Stripe listener running:
 make e2e-happy
 ```
 
-The script creates the seeded cart and checkout, waits for the payment and Checkout URL, opens the hosted Stripe page, and verifies the final states. The only manual step is completing payment with test card `4242 4242 4242 4242`, any future expiry, and any CVC; then press ENTER.
+The script registers a unique Auth user, logs in through the Gateway, polls until the Customer is provisioned, and then creates the cart and checkout with the JWT. It waits for the payment and Checkout URL, opens the hosted Stripe page, and verifies the final states. The only manual step is completing payment with test card `4242 4242 4242 4242`, any future expiry, and any CVC; then press ENTER.
 
 Expected result for Product A quantity `2`:
 

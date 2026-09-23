@@ -1,14 +1,15 @@
 package dev.erkut.customerservice.customer.application;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
-import dev.erkut.customerservice.customer.api.request.CustomerCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
-import dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
 import dev.erkut.customerservice.customer.domain.Customer;
 import dev.erkut.customerservice.customer.domain.CustomerStatus;
 import dev.erkut.customerservice.customer.persistence.CustomerRepository;
+import dev.erkut.customerservice.inbox.application.InboxService;
+import dev.erkut.customerservice.message.MessageEnvelope;
+import dev.erkut.customerservice.message.command.CreateCustomerCommand;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,43 +39,74 @@ class CustomerServiceTest {
 
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final UUID OTHER_CUSTOMER_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static final UUID AUTH_USER_ID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    private static final UUID MESSAGE_ID = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
 
     @Mock
     private CustomerRepository customerRepository;
 
+    @Mock
+    private InboxService inboxService;
+
     private CustomerService customerService() {
-        return new CustomerService(customerRepository);
+        return new CustomerService(customerRepository, inboxService);
     }
 
     @Test
-    void createCustomerNormalizesEmailAndSavesNewCustomer() {
-        CustomerCreateRequest request = new CustomerCreateRequest("Ada Lovelace", " ADA@EXAMPLE.COM ", null);
+    void provisioningCreatesCustomerWithAuthIdentityAndNormalizedEmail() {
+        MessageEnvelope envelope = envelope(MESSAGE_ID);
+        CreateCustomerCommand command = new CreateCustomerCommand(AUTH_USER_ID, " ADA@EXAMPLE.COM ");
+        when(inboxService.tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
+                .thenReturn(true);
+        when(customerRepository.existsByAuthUserId(AUTH_USER_ID)).thenReturn(false);
         when(customerRepository.existsByEmail("ada@example.com")).thenReturn(false);
         when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var response = customerService().createCustomer(request);
+        customerService().handleCreateCustomerCommand(envelope, command);
 
-        assertEquals("ada@example.com", response.email());
-        assertEquals(CustomerStatus.ACTIVE, response.status());
+        var captor = org.mockito.ArgumentCaptor.forClass(Customer.class);
+        verify(customerRepository).save(captor.capture());
+        assertEquals(AUTH_USER_ID, captor.getValue().getAuthUserId());
+        assertEquals("ada@example.com", captor.getValue().getEmail());
+        assertEquals(CustomerStatus.ACTIVE, captor.getValue().getStatus());
+        assertEquals(null, captor.getValue().getName());
+        assertEquals(null, captor.getValue().getPhone());
         verify(customerRepository).existsByEmail("ada@example.com");
-        verify(customerRepository).save(any(Customer.class));
     }
 
     @Test
-    void createCustomerDuplicateNormalizedEmailThrowsAndDoesNotSave() {
-        when(customerRepository.existsByEmail("ada@example.com")).thenReturn(true);
+    void duplicateMessageIdIsNoOp() {
+        MessageEnvelope envelope = envelope(MESSAGE_ID);
+        when(inboxService.tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
+                .thenReturn(false);
 
-        assertThrows(CustomerEmailAlreadyExistsException.class, () -> customerService().createCustomer(
-                new CustomerCreateRequest("Ada Lovelace", "ADA@example.com", null)));
+        customerService().handleCreateCustomerCommand(
+                envelope, new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com"));
 
-        verify(customerRepository).existsByEmail("ada@example.com");
+        verify(inboxService).tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any());
+        verify(customerRepository, never()).existsByAuthUserId(any());
+        verify(customerRepository, never()).save(any(Customer.class));
+    }
+
+    @Test
+    void existingAuthUserProvisioningIsNoOpForDifferentMessageId() {
+        UUID secondMessageId = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        when(inboxService.tryRegister(eq(secondMessageId), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
+                .thenReturn(true);
+        when(customerRepository.existsByAuthUserId(AUTH_USER_ID)).thenReturn(true);
+
+        customerService().handleCreateCustomerCommand(
+                envelope(secondMessageId), new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com"));
+
+        verify(customerRepository).existsByAuthUserId(AUTH_USER_ID);
+        verify(customerRepository, never()).existsByEmail(any());
         verify(customerRepository, never()).save(any(Customer.class));
     }
 
     @Test
     void getCustomerByIdReturnsMappedCustomerOrThrowsWhenMissing() {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = customer("Ada Lovelace", "ada@example.com");
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
         assertEquals("ada@example.com", customerService().getCustomerById(CUSTOMER_ID).email());
@@ -86,8 +118,8 @@ class CustomerServiceTest {
 
     @Test
     void getCustomersMapsPageAndUsesCreatedAtAndIdDescendingSort() {
-        Customer first = Customer.create("Ada", "ada@example.com", null, CREATED_AT);
-        Customer second = Customer.create("Grace", "grace@example.com", null, CREATED_AT);
+        Customer first = customer("Ada", "ada@example.com");
+        Customer second = customer("Grace", "grace@example.com");
         when(customerRepository.findAll(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(first, second)));
 
@@ -107,7 +139,7 @@ class CustomerServiceTest {
 
     @Test
     void deactivateCustomerMutatesManagedCustomerWithoutSavingAgain() {
-        Customer customer = Customer.create("Ada", "ada@example.com", null, CREATED_AT);
+        Customer customer = customer("Ada", "ada@example.com");
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
         var response = customerService().deactivateCustomer(CUSTOMER_ID);
@@ -120,7 +152,7 @@ class CustomerServiceTest {
 
     @Test
     void addCustomerAddressLoadsAggregateFlushesAndReturnsAddressResponseWithoutSavingCustomer() {
-        Customer customer = Customer.create("Ada", "ada@example.com", null, CREATED_AT);
+        Customer customer = customer("Ada", "ada@example.com");
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
         CustomerAddressResponse response = customerService().addCustomerAddress(
@@ -138,7 +170,7 @@ class CustomerServiceTest {
 
     @Test
     void removeCustomerAddressUsesAggregateAndDoesNotSaveCustomer() throws Exception {
-        Customer customer = Customer.create("Ada", "ada@example.com", null, CREATED_AT);
+        Customer customer = customer("Ada", "ada@example.com");
         var address = customer.addAddress("1 Main Street", "London", "United Kingdom", CREATED_AT.plusSeconds(1));
         setAddressId(address, UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"));
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
@@ -151,7 +183,7 @@ class CustomerServiceTest {
 
     @Test
     void addressMutationsPropagateInvalidCustomerState() {
-        Customer customer = Customer.create("Ada", "ada@example.com", null, CREATED_AT);
+        Customer customer = customer("Ada", "ada@example.com");
         customer.deactivateCustomer(CREATED_AT.plusSeconds(1));
         when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
 
@@ -167,5 +199,13 @@ class CustomerServiceTest {
         var idField = address.getClass().getDeclaredField("id");
         idField.setAccessible(true);
         idField.set(address, id);
+    }
+
+    private static Customer customer(String name, String email) {
+        return Customer.create(AUTH_USER_ID, email, CREATED_AT);
+    }
+
+    private static MessageEnvelope envelope(UUID messageId) {
+        return new MessageEnvelope(messageId, "CREATE_CUSTOMER_COMMAND", CREATED_AT, null);
     }
 }

@@ -14,13 +14,14 @@ require_command open
 require_payment_env_file
 
 wait_for_gateway
+bootstrap_e2e_customer
 verify_seed_data
 assert_clean_stock
-get_clean_cart "$CUSTOMER_A_ID"
+get_clean_cart "$E2E_CUSTOMER_ID"
 pass "Cart ready"
 add_product_to_cart "$CART_ID" 2
 
-http_get "$BASE_URL/carts/$CART_ID"
+http_get_auth "$BASE_URL/carts/$CART_ID"
 [[ "$LAST_STATUS" == "200" ]] || fail "Could not verify cart after adding Product A"
 [[ "$(json_value '.cartItems[0].quantity')" == "2" ]] || fail "Cart quantity verification failed"
 pass "Cart quantity=2 verified"

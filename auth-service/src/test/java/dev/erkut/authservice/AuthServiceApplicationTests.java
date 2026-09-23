@@ -90,6 +90,7 @@ class AuthServiceApplicationTests {
 
     @BeforeEach
     void cleanDatabase() {
+        jdbcTemplate.update("delete from outbox_messages");
         authUserRepository.deleteAll();
         authUserRepository.flush();
     }
@@ -127,6 +128,16 @@ class AuthServiceApplicationTests {
         assertNotEquals(REGISTER_PASSWORD, user.getPasswordHash());
         assertTrue(passwordEncoder.matches(REGISTER_PASSWORD, user.getPasswordHash()));
         assertFalse(result.getResponse().getContentAsString().contains(user.getPasswordHash()));
+
+        assertEquals(1, jdbcTemplate.queryForObject("select count(*) from outbox_messages", Integer.class));
+        assertEquals("CREATE_CUSTOMER_COMMAND", jdbcTemplate.queryForObject(
+                "select message_type from outbox_messages where aggregate_id = ?", String.class, user.getId()));
+        String payload = jdbcTemplate.queryForObject(
+                "select payload::text from outbox_messages where aggregate_id = ?", String.class, user.getId());
+        assertTrue(payload.contains(user.getId().toString()));
+        assertTrue(payload.contains(user.getEmail()));
+        assertFalse(payload.contains(REGISTER_PASSWORD));
+        assertFalse(payload.contains(user.getPasswordHash()));
     }
 
     @Test
@@ -152,6 +163,7 @@ class AuthServiceApplicationTests {
                 .andReturn();
 
         assertEquals(1, authUserRepository.count());
+        assertEquals(1, jdbcTemplate.queryForObject("select count(*) from outbox_messages", Integer.class));
         assertFalse(duplicate.getResponse().getContentAsString().contains("password"));
     }
 
@@ -195,6 +207,7 @@ class AuthServiceApplicationTests {
             assertEquals(requestCount - 1, conflictRequests, "all losing registrations must be conflicts");
             assertEquals(1, authUserRepository.count());
             assertTrue(authUserRepository.findByEmail(CONCURRENT_EMAIL).isPresent());
+            assertEquals(1, jdbcTemplate.queryForObject("select count(*) from outbox_messages", Integer.class));
         } finally {
             executor.shutdownNow();
             assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));

@@ -7,9 +7,6 @@ BASE_URL="${E2E_BASE_URL:-http://localhost:4002}"
 POLL_INTERVAL_SECONDS="${E2E_POLL_INTERVAL_SECONDS:-1}"
 POLL_TIMEOUT_SECONDS="${E2E_POLL_TIMEOUT_SECONDS:-60}"
 
-CUSTOMER_A_ID="c0000000-0000-0000-0000-000000000001"
-CUSTOMER_B_ID="c0000000-0000-0000-0000-000000000002"
-CUSTOMER_C_ID="c0000000-0000-0000-0000-000000000003"
 PRODUCT_A_ID="d0000000-0000-0000-0000-000000000001"
 PRODUCT_B_ID="d0000000-0000-0000-0000-000000000002"
 PRODUCT_C_ID="d0000000-0000-0000-0000-000000000003"
@@ -50,27 +47,36 @@ compose() {
     docker compose -f "$ROOT_DIR/docker-compose.yaml" "$@"
 }
 
-http_request() {
+http_request_with_token() {
+    local token="$1"
+    shift
     local method="$1"
     local url="$2"
     local body="${3:-}"
     local response_file
     local curl_status
+    local -a curl_args
 
     response_file="$(mktemp "${TMPDIR:-/tmp}/e2e-http.XXXXXX")"
+    curl_args=(
+        --silent --show-error --connect-timeout 3 --max-time 15
+        -o "$response_file" -w '%{http_code}'
+    )
+
+    if [[ -n "$token" ]]; then
+        curl_args+=( -H "Authorization: Bearer $token" )
+    fi
 
     if [[ "$method" == "GET" ]]; then
-        if ! curl_status="$(curl --silent --show-error --connect-timeout 3 --max-time 15 \
-            -o "$response_file" -w '%{http_code}' "$url")"; then
+        if ! curl_status="$(curl "${curl_args[@]}" "$url")"; then
             LAST_STATUS="000"
             LAST_BODY=""
             rm -f "$response_file"
             return 0
         fi
     else
-        if ! curl_status="$(curl --silent --show-error --connect-timeout 3 --max-time 15 \
-            -X "$method" -H 'Content-Type: application/json' \
-            --data "$body" -o "$response_file" -w '%{http_code}' "$url")"; then
+        curl_args+=( -X "$method" -H 'Content-Type: application/json' --data "$body" )
+        if ! curl_status="$(curl "${curl_args[@]}" "$url")"; then
             LAST_STATUS="000"
             LAST_BODY=""
             rm -f "$response_file"
@@ -83,12 +89,26 @@ http_request() {
     rm -f "$response_file"
 }
 
+http_request() {
+    http_request_with_token "" "$@"
+}
+
 http_get() {
     http_request GET "$1"
 }
 
+http_get_auth() {
+    [[ -n "${E2E_ACCESS_TOKEN:-}" ]] || fail "E2E access token is not available"
+    http_request_with_token "$E2E_ACCESS_TOKEN" GET "$1"
+}
+
 http_post_json() {
     http_request POST "$1" "$2"
+}
+
+http_post_json_auth() {
+    [[ -n "${E2E_ACCESS_TOKEN:-}" ]] || fail "E2E access token is not available"
+    http_request_with_token "$E2E_ACCESS_TOKEN" POST "$1" "$2"
 }
 
 json_value() {
@@ -125,13 +145,7 @@ gateway_ready() {
         POLL_LAST_OBSERVED="Product route HTTP $LAST_STATUS"
         return 1
     fi
-
-    http_get "$BASE_URL/orders?page=0&size=1"
-    if [[ "$LAST_STATUS" == "200" ]]; then
-        return 0
-    fi
-    POLL_LAST_OBSERVED="Order route HTTP $LAST_STATUS"
-    return 1
+    return 0
 }
 
 wait_for_gateway() {
@@ -168,20 +182,7 @@ query_workflow_db() {
 }
 
 verify_seed_data() {
-    local expected_customer_id expected_email expected_product_id expected_product_name
-
-    for expected_customer_id in "$CUSTOMER_A_ID" "$CUSTOMER_B_ID" "$CUSTOMER_C_ID"; do
-        http_get "$BASE_URL/customers/$expected_customer_id"
-        [[ "$LAST_STATUS" == "200" ]] || fail "Seeded customer unavailable: $expected_customer_id"
-        [[ "$(json_value '.status')" == "ACTIVE" ]] || fail "Seeded customer is not ACTIVE: $expected_customer_id"
-        case "$expected_customer_id" in
-            "$CUSTOMER_A_ID") expected_email="customer@example.com" ;;
-            "$CUSTOMER_B_ID") expected_email="out-of-stock@example.com" ;;
-            "$CUSTOMER_C_ID") expected_email="payment-expiry@example.com" ;;
-        esac
-        [[ "$(json_value '.email')" == "$expected_email" ]] || fail "Unexpected seeded customer data: $expected_customer_id"
-    done
-    pass "Customers available"
+    local expected_product_id expected_product_name
 
     for expected_product_id in "$PRODUCT_A_ID" "$PRODUCT_B_ID" "$PRODUCT_C_ID"; do
         http_get "$BASE_URL/products/$expected_product_id"
@@ -202,13 +203,63 @@ verify_seed_data() {
     pass "Seed stock verified"
 }
 
+prepare_e2e_identity() {
+    if [[ -z "${E2E_EMAIL:-}" ]]; then
+        E2E_EMAIL="e2e-$(date +%s)-$$-${RANDOM}@example.com"
+    fi
+    E2E_PASSWORD="${E2E_PASSWORD:-E2eTestPassword123!}"
+}
+
+register_e2e_user() {
+    http_post_json "$BASE_URL/auth/register" \
+        "{\"email\":\"$E2E_EMAIL\",\"password\":\"$E2E_PASSWORD\"}"
+    case "$LAST_STATUS" in
+        2??) pass "E2E user registered: $E2E_EMAIL" ;;
+        *) fail "E2E registration failed (HTTP $LAST_STATUS)" ;;
+    esac
+}
+
+login_e2e_user() {
+    http_post_json "$BASE_URL/auth/login" \
+        "{\"email\":\"$E2E_EMAIL\",\"password\":\"$E2E_PASSWORD\"}"
+    [[ "$LAST_STATUS" == "200" ]] || fail "E2E login failed (HTTP $LAST_STATUS)"
+    E2E_ACCESS_TOKEN="$(json_value '.accessToken // empty')"
+    [[ -n "$E2E_ACCESS_TOKEN" && "$E2E_ACCESS_TOKEN" != "null" ]] || fail "E2E login response did not contain an access token"
+    pass "E2E user logged in"
+}
+
+customer_is_provisioned() {
+    http_get_auth "$BASE_URL/customers?page=0&size=100"
+    if [[ "$LAST_STATUS" != "200" ]]; then
+        POLL_LAST_OBSERVED="Customer list HTTP $LAST_STATUS"
+        return 1
+    fi
+
+    E2E_CUSTOMER_ID="$(jq -r --arg email "$E2E_EMAIL" \
+        '[.content[]? | select(.email == $email) | .customerId][0] // empty' <<<"$LAST_BODY")"
+    if valid_uuid "$E2E_CUSTOMER_ID"; then
+        return 0
+    fi
+
+    POLL_LAST_OBSERVED="Customer not provisioned yet"
+    return 1
+}
+
+bootstrap_e2e_customer() {
+    prepare_e2e_identity
+    register_e2e_user
+    login_e2e_user
+    poll_until "Customer provisioning for $E2E_EMAIL" "$POLL_TIMEOUT_SECONDS" customer_is_provisioned
+    pass "Customer provisioned: $E2E_CUSTOMER_ID"
+}
+
 assert_clean_stock() {
     [[ "$(query_stock_db "$PRODUCT_A_ID")" == '100|0|true' ]] || fail "E2E environment is not clean: Product A stock changed. Run: make e2e-reset"
 }
 
 get_clean_cart() {
     local customer_id="$1"
-    http_get "$BASE_URL/carts/current?customerId=$customer_id"
+    http_get_auth "$BASE_URL/carts/current?customerId=$customer_id"
     [[ "$LAST_STATUS" == "200" ]] || fail "Could not get current cart for customer $customer_id (HTTP $LAST_STATUS)"
     [[ "$(json_value '.status')" == "ACTIVE" ]] || fail "E2E environment is not clean: cart is not ACTIVE. Run: make e2e-reset"
     [[ "$(json_value '.cartItems | length')" == "0" ]] || fail "E2E environment is not clean: cart contains items. Run: make e2e-reset"
@@ -219,7 +270,7 @@ get_clean_cart() {
 add_product_to_cart() {
     local cart_id="$1"
     local quantity="$2"
-    http_post_json "$BASE_URL/carts/$cart_id/items" \
+    http_post_json_auth "$BASE_URL/carts/$cart_id/items" \
         "{\"productId\":\"$PRODUCT_A_ID\",\"quantity\":$quantity}"
     [[ "$LAST_STATUS" == "200" ]] || fail "Could not add Product A to cart (HTTP $LAST_STATUS)"
     [[ "$(json_value '.cartItems[0].productId')" == "$PRODUCT_A_ID" ]] || fail "Cart does not contain Product A"
@@ -229,7 +280,7 @@ add_product_to_cart() {
 
 start_checkout() {
     local cart_id="$1"
-    http_post_json "$BASE_URL/carts/$cart_id/checkout" '{"currency":"TRY"}'
+    http_post_json_auth "$BASE_URL/carts/$cart_id/checkout" '{"currency":"TRY"}'
     [[ "$LAST_STATUS" == "201" ]] || fail "Checkout did not start (HTTP $LAST_STATUS)"
     ORDER_ID="$(json_value '.orderId')"
     valid_uuid "$ORDER_ID" || fail "Checkout response did not contain a valid order id"
@@ -238,7 +289,7 @@ start_checkout() {
 }
 
 order_is_checkout_progressing() {
-    http_get "$BASE_URL/orders/$ORDER_ID"
+    http_get_auth "$BASE_URL/orders/$ORDER_ID"
     if [[ "$LAST_STATUS" == "200" ]]; then
         ORDER_STATUS="$(json_value '.status')"
         ORDER_REJECTION_REASON="$(json_value '.rejectionReason')"
@@ -257,7 +308,7 @@ wait_for_order_created() {
 }
 
 payment_is_awaiting() {
-    http_get "$BASE_URL/payments/order/$ORDER_ID"
+    http_get_auth "$BASE_URL/payments/order/$ORDER_ID"
     if [[ "$LAST_STATUS" == "200" ]]; then
         PAYMENT_STATUS="$(json_value '.status')"
         CHECKOUT_URL="$(json_value '.checkoutUrl')"
@@ -271,7 +322,7 @@ payment_is_awaiting() {
 
 payment_is_status() {
     local expected_status="$1"
-    http_get "$BASE_URL/payments/order/$ORDER_ID"
+    http_get_auth "$BASE_URL/payments/order/$ORDER_ID"
     if [[ "$LAST_STATUS" == "200" ]]; then
         PAYMENT_STATUS="$(json_value '.status')"
         POLL_LAST_OBSERVED="$PAYMENT_STATUS"
@@ -295,7 +346,7 @@ wait_for_payment_status() {
 
 order_is_status() {
     local expected_status="$1"
-    http_get "$BASE_URL/orders/$ORDER_ID"
+    http_get_auth "$BASE_URL/orders/$ORDER_ID"
     if [[ "$LAST_STATUS" == "200" ]]; then
         ORDER_STATUS="$(json_value '.status')"
         ORDER_REJECTION_REASON="$(json_value '.rejectionReason')"
@@ -308,7 +359,7 @@ order_is_status() {
 }
 
 order_is_rejected_for_payment_expiry() {
-    http_get "$BASE_URL/orders/$ORDER_ID"
+    http_get_auth "$BASE_URL/orders/$ORDER_ID"
     if [[ "$LAST_STATUS" == "200" ]]; then
         ORDER_STATUS="$(json_value '.status')"
         ORDER_REJECTION_REASON="$(json_value '.rejectionReason')"
@@ -334,7 +385,7 @@ wait_for_order_payment_expired() {
 cart_is_status() {
     local cart_id="$1"
     local expected_status="$2"
-    http_get "$BASE_URL/carts/$cart_id"
+    http_get_auth "$BASE_URL/carts/$cart_id"
     if [[ "$LAST_STATUS" == "200" ]]; then
         CART_STATUS="$(json_value '.status')"
         POLL_LAST_OBSERVED="$CART_STATUS"

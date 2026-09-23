@@ -13,10 +13,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class CustomerDomainTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T00:00:00Z");
+    private static final UUID AUTH_USER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     @Test
     void createNormalizesEmailAndStartsActive() {
-        Customer customer = Customer.create("Ada Lovelace", "  ADA@example.com ", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "  ADA@example.com ", CREATED_AT);
 
         assertEquals("ada@example.com", customer.getEmail());
         assertEquals(CustomerStatus.ACTIVE, customer.getStatus());
@@ -26,7 +27,7 @@ class CustomerDomainTest {
 
     @Test
     void addAddressAddsChildAndUpdatesTimestamp() {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "ada@example.com", CREATED_AT);
         Instant updatedAt = CREATED_AT.plusSeconds(1);
 
         var address = customer.addAddress("1 Main Street", "London", "United Kingdom", updatedAt);
@@ -40,7 +41,7 @@ class CustomerDomainTest {
 
     @Test
     void removeAddressRemovesRequestedChildAndUpdatesTimestamp() throws Exception {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "ada@example.com", CREATED_AT);
         var address = customer.addAddress(
                 "1 Main Street", "London", "United Kingdom", CREATED_AT.plusSeconds(1));
         UUID addressId = UUID.randomUUID();
@@ -55,7 +56,7 @@ class CustomerDomainTest {
 
     @Test
     void returnedAddressesCollectionCannotBeExternallyMutated() {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "ada@example.com", CREATED_AT);
         customer.addAddress("1 Main Street", "London", "United Kingdom", CREATED_AT.plusSeconds(1));
 
         assertThrows(UnsupportedOperationException.class, () -> customer.getAddresses().clear());
@@ -64,7 +65,7 @@ class CustomerDomainTest {
 
     @Test
     void inactiveCustomerCannotAddOrRemoveAddress() throws Exception {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "ada@example.com", CREATED_AT);
         var address = customer.addAddress(
                 "1 Main Street", "London", "United Kingdom", CREATED_AT.plusSeconds(1));
         setAddressId(address, UUID.randomUUID());
@@ -78,7 +79,7 @@ class CustomerDomainTest {
 
     @Test
     void removeAddressReportsMissingAddress() {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "ada@example.com", CREATED_AT);
 
         assertThrows(AddressNotFoundException.class, () -> customer.removeAddress(
                 UUID.randomUUID(), CREATED_AT.plusSeconds(1)));
@@ -86,7 +87,7 @@ class CustomerDomainTest {
 
     @Test
     void deactivateIsIdempotentAndKeepsFirstTransitionTime() {
-        Customer customer = Customer.create("Ada Lovelace", "ada@example.com", null, CREATED_AT);
+        Customer customer = Customer.create(AUTH_USER_ID, "ada@example.com", CREATED_AT);
         Instant deactivatedAt = CREATED_AT.plusSeconds(1);
 
         customer.deactivateCustomer(deactivatedAt);

@@ -2,10 +2,8 @@ package dev.erkut.customerservice.customer.api;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
-import dev.erkut.customerservice.customer.api.request.CustomerCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerResponse;
 import dev.erkut.customerservice.customer.domain.exception.AddressNotFoundException;
-import dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.customer.api.error.GlobalExceptionHandler;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
@@ -26,8 +24,8 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -49,47 +47,6 @@ class CustomerControllerTest {
 
     @MockitoBean
     private CustomerService customerService;
-
-    @Test
-    void createCustomer_validRequestReturnsCreated() throws Exception {
-        when(customerService.createCustomer(any(CustomerCreateRequest.class)))
-                .thenReturn(customerResponse(CustomerStatus.ACTIVE));
-
-        mockMvc.perform(post("/customers")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"name":"Ada Lovelace","email":"ada@example.com","phone":"+441234567890"}
-                                """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
-
-        verify(customerService).createCustomer(
-                new CustomerCreateRequest("Ada Lovelace", "ada@example.com", "+441234567890"));
-    }
-
-    @Test
-    void createCustomer_invalidRequestReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/customers")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"\",\"email\":\"not-an-email\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Request validation failed"));
-
-        verify(customerService, never()).createCustomer(any());
-    }
-
-    @Test
-    void createCustomer_duplicateEmailReturnsConflict() throws Exception {
-        when(customerService.createCustomer(any(CustomerCreateRequest.class)))
-                .thenThrow(new CustomerEmailAlreadyExistsException("duplicate email"));
-
-        mockMvc.perform(post("/customers")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Ada Lovelace\",\"email\":\"ada@example.com\"}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("duplicate email"));
-    }
 
     @Test
     void getCustomerById_successReturnsOkAndMissingReturnsNotFound() throws Exception {

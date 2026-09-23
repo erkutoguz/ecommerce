@@ -21,12 +21,33 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
     networks:
       - app-network
     restart: unless-stopped
+
+  kafka-init:
+    image: apache/kafka:4.1.1
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - ./infrastructure/kafka/init-topics.sh:/opt/kafka-init.sh:ro
+    command: [ "/bin/bash", "/opt/kafka-init.sh" ]
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - app-network
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -74,9 +95,13 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://customer-db:5432/customer
       SPRING_DATASOURCE_USERNAME: customer
       SPRING_DATASOURCE_PASSWORD: customer-pass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       customer-db:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - customer-db-network
@@ -107,6 +132,7 @@ services:
       SPRING_DATASOURCE_USERNAME: order
       SPRING_DATASOURCE_PASSWORD: order-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       order-db:
         condition: service_healthy
@@ -114,8 +140,8 @@ services:
         condition: service_started
       product-service:
         condition: service_started
-      kafka:
-        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - order-db-network
@@ -144,11 +170,12 @@ services:
       SPRING_DATASOURCE_USERNAME: product
       SPRING_DATASOURCE_PASSWORD: product-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       product-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - product-db-network
@@ -175,11 +202,12 @@ services:
       SPRING_DATASOURCE_USERNAME: order-workflow
       SPRING_DATASOURCE_PASSWORD: order-workflow-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       order-workflow-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - order-workflow-db-network
@@ -209,11 +237,12 @@ services:
       SPRING_DATASOURCE_USERNAME: stock
       SPRING_DATASOURCE_PASSWORD: stock-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       stock-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - stock-db-network
@@ -244,11 +273,12 @@ services:
       SPRING_DATASOURCE_USERNAME: payment
       SPRING_DATASOURCE_PASSWORD: payment-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       payment-db:
         condition: service_healthy
-      kafka:
-        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - payment-db-network
@@ -278,9 +308,13 @@ services:
       SPRING_DATASOURCE_PASSWORD: auth-pass
       JWT_PRIVATE_KEY_PATH: /run/secrets/auth-keys/private.pem
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
     depends_on:
       auth-db:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - app-network
       - auth-db-network

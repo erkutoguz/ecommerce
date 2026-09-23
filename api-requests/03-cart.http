@@ -1,8 +1,9 @@
 ### Step 3 - Create/get an active cart and add Product A
-# Requires: step 1, step 2, and customerId/productAId from http-client.env.json.
+# Requires: Auth.http, step 1, step 2, and runtime customerId/accessToken.
 # Produces: cartId, which step 4 uses for checkout.
 
 GET {{baseUrl}}/carts/current?customerId={{customerId}}
+Authorization: Bearer {{accessToken}}
 
 > {%
     client.test("active cart is returned", function () {
@@ -15,6 +16,7 @@ GET {{baseUrl}}/carts/current?customerId={{customerId}}
 ### Add two units of Product A
 POST {{baseUrl}}/carts/{{cartId}}/items
 Content-Type: application/json
+Authorization: Bearer {{accessToken}}
 
 {
   "productId": "{{productAId}}",
@@ -23,3 +25,4 @@ Content-Type: application/json
 
 ### Verify the cart item snapshot/input
 GET {{baseUrl}}/carts/{{cartId}}
+Authorization: Bearer {{accessToken}}

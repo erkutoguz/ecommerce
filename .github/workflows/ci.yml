@@ -18,6 +18,7 @@ jobs:
       matrix:
         service:
           - api-gateway
+          - auth-service
           - customer-service
           - order-service
           - product-service
@@ -35,7 +36,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: maven
           cache-dependency-path: ${{ matrix.service }}/pom.xml
 

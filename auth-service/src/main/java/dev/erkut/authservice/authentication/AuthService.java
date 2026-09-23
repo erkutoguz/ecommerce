@@ -5,6 +5,8 @@ import dev.erkut.authservice.authentication.dto.LoginRequest;
 import dev.erkut.authservice.authentication.dto.RegisterRequest;
 import dev.erkut.authservice.exception.EmailAlreadyExistsException;
 import dev.erkut.authservice.exception.InvalidCredentialsException;
+import dev.erkut.authservice.message.command.CreateCustomerCommand;
+import dev.erkut.authservice.outbox.application.OutboxService;
 import dev.erkut.authservice.token.AccessTokenService;
 import dev.erkut.authservice.user.AuthUser;
 import dev.erkut.authservice.user.AuthUserRepository;
@@ -28,17 +30,20 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenService accessTokenService;
     private final AuthenticationManager authenticationManager;
+    private final OutboxService outboxService;
 
     public AuthService(
             AuthUserRepository authUserRepository,
             PasswordEncoder passwordEncoder,
             AccessTokenService accessTokenService,
-            AuthenticationManager authenticationManager
+            AuthenticationManager authenticationManager,
+            OutboxService outboxService
     ) {
         this.authUserRepository = authUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.accessTokenService = accessTokenService;
         this.authenticationManager = authenticationManager;
+        this.outboxService = outboxService;
     }
 
     @Transactional
@@ -73,6 +78,9 @@ public class AuthService {
         }
 
         String accessToken = accessTokenService.generate(savedUser, now);
+
+        CreateCustomerCommand command = new CreateCustomerCommand(savedUser.getId(), savedUser.getEmail());
+        outboxService.createCustomerCommand(command, now);
 
         return new AuthResponse(
                 accessToken,
