@@ -3,10 +3,6 @@ package dev.erkut.orderservice.checkout.application;
 import dev.erkut.orderservice.cart.application.CartService;
 import dev.erkut.orderservice.cart.domain.Cart;
 import dev.erkut.orderservice.cart.domain.CartItem;
-import dev.erkut.orderservice.integration.customer.CustomerClient;
-import dev.erkut.orderservice.integration.customer.CustomerLookupResponse;
-import dev.erkut.orderservice.integration.customer.CustomerStatus;
-import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
 import dev.erkut.orderservice.integration.product.*;
 import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.Order;
@@ -19,34 +15,34 @@ import java.util.*;
 @Service
 public class CheckoutService {
     private final CartService cartService;
-    private final CustomerClient customerClient;
     private final ProductClient productClient;
     private final CheckoutTransactionalService transactionalService;
 
     public CheckoutService(
             CartService cartService,
-            CustomerClient customerClient,
             ProductClient productClient,
             CheckoutTransactionalService transactionalService
     ) {
         this.cartService = cartService;
-        this.customerClient = customerClient;
         this.productClient = productClient;
         this.transactionalService = transactionalService;
     }
 
-    public Order checkout(UUID cartId, Currency currency) {
+    public Order checkout(UUID cartId, UUID customerId, Currency currency) {
         if (cartId == null) {
             throw new IllegalArgumentException("Cart id cannot be null");
         }
+
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer id cannot be null");
+        }
+
 
         if (currency == null) {
             throw new IllegalArgumentException("Currency cannot be null");
         }
 
-        Cart cart = cartService.getCartById(cartId);
-
-        validateCustomer(cart.getCustomerId());
+        Cart cart = cartService.getCartById(cartId, customerId);
 
         List<ProductLookupResponse> products =
                 getValidatedProducts(cart.getCartItems());
@@ -56,19 +52,12 @@ public class CheckoutService {
 
         return transactionalService.checkout(
                 cart.getId(),
+                customerId,
                 cart.getVersion(),
                 currency,
                 snapshots,
                 Instant.now()
         );
-    }
-
-    private void validateCustomer(UUID customerId) {
-        CustomerLookupResponse customer = customerClient.getCustomerDetail(customerId);
-
-        if (customer.status() != CustomerStatus.ACTIVE) {
-            throw new InvalidCustomerStateException("Customer is not active");
-        }
     }
 
     private List<ProductLookupResponse> getValidatedProducts(List<CartItem> cartItems) {

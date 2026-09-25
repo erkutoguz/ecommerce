@@ -25,8 +25,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -248,6 +250,36 @@ class OrderPersistenceTest {
         assertEquals(new BigDecimal("50.00"), reloaded.getTotalAmount());
         assertEquals(PRODUCT_A, reloaded.getOrderItems().getFirst().getProductId());
         assertEquals("Product A", reloaded.getOrderItems().getFirst().getProductNameSnapshot());
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void findWithItemsByIdAndCustomerId_shouldEnforceOwner() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        UUID cartId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb6");
+        UUID customerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6");
+        UUID foreignCustomerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7");
+        insertCart(cartId, customerId);
+
+        UUID orderId = transactionTemplate.execute(status ->
+                orderRepository.save(Order.create(
+                        cartId,
+                        customerId,
+                        Currency.TRY,
+                        List.of(new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("10.00"), 1)),
+                        CREATED_AT
+                )).getId()
+        );
+
+        boolean ownedOrderFound = Boolean.TRUE.equals(transactionTemplate.execute(status ->
+                orderRepository.findWithItemsByIdAndCustomerId(orderId, customerId).isPresent()
+        ));
+        boolean foreignOrderFound = Boolean.TRUE.equals(transactionTemplate.execute(status ->
+                orderRepository.findWithItemsByIdAndCustomerId(orderId, foreignCustomerId).isPresent()
+        ));
+
+        assertTrue(ownedOrderFound);
+        assertFalse(foreignOrderFound);
     }
 
     private void insertCart(UUID cartId, UUID customerId) {

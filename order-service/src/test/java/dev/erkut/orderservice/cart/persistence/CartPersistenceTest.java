@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -222,5 +223,25 @@ class CartPersistenceTest {
                 Integer.class,
                 customerId
         ));
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void findWithCartItemsByIdAndCustomerId_shouldEnforceOwner() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        UUID ownerCustomerId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa09");
+        UUID cartId = transactionTemplate.execute(status ->
+                cartRepository.save(Cart.create(ownerCustomerId, CREATED_AT)).getId()
+        );
+
+        boolean ownedCartFound = Boolean.TRUE.equals(transactionTemplate.execute(status ->
+                cartRepository.findWithCartItemsByIdAndCustomerId(cartId, ownerCustomerId).isPresent()
+        ));
+        boolean foreignCartFound = Boolean.TRUE.equals(transactionTemplate.execute(status ->
+                cartRepository.findWithCartItemsByIdAndCustomerId(cartId, CUSTOMER_B).isPresent()
+        ));
+
+        assertTrue(ownedCartFound);
+        assertFalse(foreignCartFound);
     }
 }

@@ -171,20 +171,25 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Page<OrderResponse> getOrders(UUID customerId, int page, int size) {
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer id cannot be null");
+        }
+
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending()
                 .and(Sort.by(Sort.Direction.DESC, "id")));
 
-        Page<Order> orders = customerId == null
-                ? orderRepository.findAll(pageable)
-                : orderRepository.findAllByCustomerId(customerId, pageable);
+        Page<Order> orders = orderRepository.findAllByCustomerId(customerId, pageable);
 
         return orders.map(OrderMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse getOrderById(UUID orderId) {
-        Order order = orderRepository.findWithItemsById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+    public OrderResponse getOrderById(UUID orderId, UUID customerId) {
+        Order order = orderRepository.findWithItemsByIdAndCustomerId(orderId, customerId)
+                .orElseThrow(() ->
+                        new OrderNotFoundException("Order not found with id: " + orderId)
+                );
+
         return OrderMapper.toResponse(order);
     }
 

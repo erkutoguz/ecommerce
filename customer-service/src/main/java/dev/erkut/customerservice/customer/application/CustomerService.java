@@ -1,5 +1,6 @@
 package dev.erkut.customerservice.customer.application;
 
+import dev.erkut.customerservice.customer.api.internal.CustomerLookupResponse;
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
 import dev.erkut.customerservice.customer.api.response.CustomerResponse;
@@ -62,6 +63,17 @@ public class CustomerService {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
         return CustomerMapper.toResponse(customer);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomerLookupResponse getByAuthUserId(UUID authUserId) {
+        Customer customer = customerRepository.findByAuthUserId(authUserId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with auth id: " + authUserId));
+
+        return new CustomerLookupResponse(
+                customer.getId(),
+                customer.getStatus()
+        );
     }
 
     @Transactional(readOnly = true)

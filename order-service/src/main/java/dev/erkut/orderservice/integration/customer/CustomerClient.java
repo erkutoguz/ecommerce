@@ -12,17 +12,25 @@ public class CustomerClient {
     private final RestClient client;
 
     public CustomerClient(RestClient.Builder clientBuilder,
-                          @Value("${restclient.customer.url}") String customerUrl) {
-        this.client = clientBuilder.baseUrl(customerUrl).build();
+                          @Value("${restclient.customer.base-url}") String customerBaseUrl) {
+        this.client = clientBuilder.baseUrl(customerBaseUrl).build();
     }
 
-    public CustomerLookupResponse getCustomerDetail(UUID customerId) {
+    public CustomerLookupResponse getByAuthUserId(UUID authUserId) {
         try {
-            return this.client.get().uri("/{customerId}", customerId).retrieve()
+            return this.client.get().uri("/internal/by-auth-user/{authUserId}", authUserId).retrieve()
                     .onStatus(
                             status -> status.value() == 404,
                             (req, res) -> {
-                                throw new CustomerNotFoundException("Customer not found with id: " + customerId);
+                                throw new CustomerNotFoundException(
+                                        "Customer not found for auth user: " + authUserId
+                                );
+                            })
+                    .onStatus(HttpStatusCode::is4xxClientError,
+                            (req, res) -> {
+                                throw new CustomerServiceUnavailableException(
+                                        "Customer service returned unexpected status: " + res.getStatusCode().value()
+                                );
                             })
                     .onStatus(HttpStatusCode::is5xxServerError,
                             (req, res) -> {

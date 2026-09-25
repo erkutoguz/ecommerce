@@ -35,12 +35,13 @@ public class CheckoutTransactionalService {
     @Transactional
     public Order checkout(
             UUID sourceCartId,
+            UUID customerId,
             long expectedCartVersion,
             Currency currency,
             List<OrderLineSnapshot> itemSnapshots,
             Instant now
     ) {
-        Cart cart = cartService.getCartById(sourceCartId);
+        Cart cart = cartService.getCartById(sourceCartId, customerId);
 
         if(cart.getVersion() != expectedCartVersion) {
             throw new CartChangedDuringCheckoutException("Cart changed during checkout");

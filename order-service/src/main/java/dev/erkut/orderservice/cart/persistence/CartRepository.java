@@ -17,4 +17,7 @@ public interface CartRepository extends JpaRepository<Cart, UUID> {
 
     @EntityGraph(attributePaths = "cartItems")
     Optional<Cart> findByCustomerIdAndStatusIn(UUID customerId, Collection<CartStatus> statuses);
+
+    @EntityGraph(attributePaths = "cartItems")
+    Optional<Cart> findWithCartItemsByIdAndCustomerId(UUID id, UUID customerId);
 }

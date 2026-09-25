@@ -24,10 +24,9 @@ public class CartTransactionalService {
     }
 
     @Transactional
-    public Cart addCartItem(UUID cartId, UUID productId, int quantity, Instant now) {
-        Cart cart = cartRepository.findById(cartId)
+    public Cart addCartItem(UUID cartId, UUID customerId, UUID productId, int quantity, Instant now) {
+        Cart cart = cartRepository.findWithCartItemsByIdAndCustomerId(cartId, customerId)
                 .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
-
         cart.addCartItem(productId, quantity, now);
         return cart;
     }

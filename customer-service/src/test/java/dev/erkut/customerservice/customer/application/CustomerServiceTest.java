@@ -1,6 +1,7 @@
 package dev.erkut.customerservice.customer.application;
 
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
+import dev.erkut.customerservice.customer.api.internal.CustomerLookupResponse;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
@@ -117,6 +118,27 @@ class CustomerServiceTest {
     }
 
     @Test
+    void getByAuthUserIdReturnsCustomerIdAndStatusWithoutUsingAuthUserIdAsCustomerId() throws Exception {
+        Customer customer = customer("Ada Lovelace", "ada@example.com");
+        setCustomerId(customer, CUSTOMER_ID);
+        when(customerRepository.findByAuthUserId(AUTH_USER_ID)).thenReturn(Optional.of(customer));
+
+        CustomerLookupResponse response = customerService().getByAuthUserId(AUTH_USER_ID);
+
+        assertEquals(CUSTOMER_ID, response.customerId());
+        assertEquals(CustomerStatus.ACTIVE, response.status());
+        verify(customerRepository).findByAuthUserId(AUTH_USER_ID);
+    }
+
+    @Test
+    void getByAuthUserIdThrowsWhenAuthUserIdIsUnknown() {
+        when(customerRepository.findByAuthUserId(AUTH_USER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(CustomerNotFoundException.class,
+                () -> customerService().getByAuthUserId(AUTH_USER_ID));
+    }
+
+    @Test
     void getCustomersMapsPageAndUsesCreatedAtAndIdDescendingSort() {
         Customer first = customer("Ada", "ada@example.com");
         Customer second = customer("Grace", "grace@example.com");
@@ -199,6 +221,12 @@ class CustomerServiceTest {
         var idField = address.getClass().getDeclaredField("id");
         idField.setAccessible(true);
         idField.set(address, id);
+    }
+
+    private static void setCustomerId(Customer customer, UUID id) throws Exception {
+        var idField = Customer.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.set(customer, id);
     }
 
     private static Customer customer(String name, String email) {

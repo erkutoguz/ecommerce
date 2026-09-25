@@ -23,7 +23,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -186,31 +185,6 @@ class OrderServiceTest {
     }
 
     @Test
-    void getOrders_withoutCustomerId_shouldReturnPaginatedOrders() {
-        Order firstOrder = validOrder(CREATED_AT);
-        Order secondOrder = validOrder(CREATED_AT);
-        Pageable requestedPage = org.springframework.data.domain.PageRequest.of(1, 2);
-        Page<Order> orders = new PageImpl<>(List.of(firstOrder, secondOrder), requestedPage, 5);
-        when(orderRepository.findAll(any(Pageable.class))).thenReturn(orders);
-        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-
-        Page<OrderResponse> response = orderService.getOrders(null, 1, 2);
-
-        assertEquals(5, response.getTotalElements());
-        assertEquals(3, response.getTotalPages());
-        assertEquals(2, response.getContent().size());
-        assertEquals(SOURCE_CART_ID, response.getContent().getFirst().sourceCartId());
-        assertEquals(OrderStatus.PENDING_STOCK, response.getContent().getFirst().status());
-        verify(orderRepository).findAll(pageableCaptor.capture());
-        Pageable pageable = pageableCaptor.getValue();
-        assertEquals(1, pageable.getPageNumber());
-        assertEquals(2, pageable.getPageSize());
-        assertEquals(Sort.Direction.DESC, pageable.getSort().getOrderFor("createdAt").getDirection());
-        assertEquals(Sort.Direction.DESC, pageable.getSort().getOrderFor("id").getDirection());
-        verify(orderRepository, never()).findAllByCustomerId(any(UUID.class), any(Pageable.class));
-    }
-
-    @Test
     void getOrders_withCustomerId_shouldReturnFilteredPaginatedOrders() {
         Order order = validOrder(CREATED_AT);
         Page<Order> orders = new PageImpl<>(List.of(order), org.springframework.data.domain.PageRequest.of(0, 2), 1);
@@ -224,6 +198,14 @@ class OrderServiceTest {
         verify(orderRepository).findAllByCustomerId(customerCaptor.capture(), any(Pageable.class));
         assertEquals(CUSTOMER_ID, customerCaptor.getValue());
         verify(orderRepository, never()).findAll(any(Pageable.class));
+    }
+
+    @Test
+    void getOrders_withoutCustomerId_shouldRejectUnscopedListing() {
+        assertThrows(IllegalArgumentException.class, () -> orderService.getOrders(null, 0, 10));
+
+        verify(orderRepository, never()).findAll(any(Pageable.class));
+        verify(orderRepository, never()).findAllByCustomerId(any(UUID.class), any(Pageable.class));
     }
 
     @Test
@@ -249,10 +231,12 @@ class OrderServiceTest {
 
     @Test
     void getOrderById_unknownOrder_shouldThrowOrderNotFoundException() {
-        when(orderRepository.findWithItemsById(ORDER_ID)).thenReturn(Optional.empty());
+        when(orderRepository.findWithItemsByIdAndCustomerId(ORDER_ID, CUSTOMER_ID))
+                .thenReturn(Optional.empty());
 
-        assertThrows(OrderNotFoundException.class, () -> orderService.getOrderById(ORDER_ID));
-        verify(orderRepository).findWithItemsById(ORDER_ID);
+        assertThrows(OrderNotFoundException.class,
+                () -> orderService.getOrderById(ORDER_ID, CUSTOMER_ID));
+        verify(orderRepository).findWithItemsByIdAndCustomerId(ORDER_ID, CUSTOMER_ID);
     }
 
     @Test
@@ -265,9 +249,10 @@ class OrderServiceTest {
     @Test
     void getOrderById_shouldReturnMappedOrder() {
         Order order = validOrder(CREATED_AT);
-        when(orderRepository.findWithItemsById(ORDER_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.findWithItemsByIdAndCustomerId(ORDER_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(order));
 
-        OrderResponse response = orderService.getOrderById(ORDER_ID);
+        OrderResponse response = orderService.getOrderById(ORDER_ID, CUSTOMER_ID);
 
         assertEquals(SOURCE_CART_ID, response.sourceCartId());
         assertEquals(CUSTOMER_ID, response.customerId());
@@ -275,7 +260,7 @@ class OrderServiceTest {
         assertEquals(2, response.items().size());
         assertEquals(PRODUCT_A, response.items().getFirst().productId());
         assertEquals(new BigDecimal("350.00"), response.totalAmount());
-        verify(orderRepository).findWithItemsById(ORDER_ID);
+        verify(orderRepository).findWithItemsByIdAndCustomerId(ORDER_ID, CUSTOMER_ID);
     }
 
     private static Order validOrder(Instant now) {

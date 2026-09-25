@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.order.persistence;
 
 import dev.erkut.orderservice.order.domain.Order;
+
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -17,4 +18,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     Page<Order> findAllByCustomerId(UUID customerId, Pageable pageable);
 
+    @EntityGraph(attributePaths = "orderItems")
+    Optional<Order> findWithItemsByIdAndCustomerId(UUID id, UUID customerId);
 }
