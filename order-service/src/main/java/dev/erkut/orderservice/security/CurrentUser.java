@@ -11,17 +11,7 @@ import java.util.UUID;
 public class CurrentUser {
 
     public UUID authUserId() {
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)
-                || !authentication.isAuthenticated()) {
-            throw new InvalidCurrentUserException(
-                    "Authenticated JWT user is required"
-            );
-        }
-
-        String subject = jwtAuthentication.getToken().getSubject();
+        String subject = jwtAuthentication().getToken().getSubject();
 
         if (subject == null || subject.isBlank()) {
             throw new InvalidCurrentUserException(
@@ -36,5 +26,23 @@ public class CurrentUser {
                     "JWT subject is not a valid UUID"
             );
         }
+    }
+
+    public String accessToken() {
+        return jwtAuthentication().getToken().getTokenValue();
+    }
+
+    private JwtAuthenticationToken jwtAuthentication() {
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)
+                || !authentication.isAuthenticated()) {
+            throw new InvalidCurrentUserException(
+                    "Authenticated JWT user is required"
+            );
+        }
+
+        return jwtAuthentication;
     }
 }

@@ -4,6 +4,7 @@ import dev.erkut.customerservice.customer.application.CustomerService;
 import dev.erkut.customerservice.customer.api.error.GlobalExceptionHandler;
 import dev.erkut.customerservice.customer.domain.CustomerStatus;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
+import dev.erkut.customerservice.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -32,8 +33,12 @@ class InternalCustomerControllerTest {
     @MockitoBean
     private CustomerService customerService;
 
+    @MockitoBean
+    private CurrentUser currentUser;
+
     @Test
     void knownAuthUserIdReturnsMinimalCustomerLookup() throws Exception {
+        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
         when(customerService.getByAuthUserId(AUTH_USER_ID))
                 .thenReturn(new CustomerLookupResponse(CUSTOMER_ID, CustomerStatus.ACTIVE));
 
@@ -50,11 +55,24 @@ class InternalCustomerControllerTest {
 
     @Test
     void unknownAuthUserIdReturnsNotFound() throws Exception {
+        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
         when(customerService.getByAuthUserId(AUTH_USER_ID))
                 .thenThrow(new CustomerNotFoundException("Customer not found with auth id: " + AUTH_USER_ID));
 
         mockMvc.perform(get("/internal/by-auth-user/{authUserId}", AUTH_USER_ID))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Customer not found with auth id: " + AUTH_USER_ID));
+    }
+
+    @Test
+    void differentAuthUserIdIsNotResolved() throws Exception {
+        UUID otherAuthUserId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
+
+        mockMvc.perform(get("/internal/by-auth-user/{authUserId}", otherAuthUserId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Customer not found"));
+
+        org.mockito.Mockito.verifyNoInteractions(customerService);
     }
 }

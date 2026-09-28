@@ -95,12 +95,15 @@ services:
       context: ./customer-service
     ports:
       - "4001:4001"
+    volumes:
+      - ${HOME}/.ecommerce-keys/public.pem:/run/secrets/auth-keys/public.pem:ro
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://customer-db:5432/customer
       SPRING_DATASOURCE_USERNAME: customer
       SPRING_DATASOURCE_PASSWORD: customer-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
+      JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
     depends_on:
       customer-db:
         condition: service_healthy

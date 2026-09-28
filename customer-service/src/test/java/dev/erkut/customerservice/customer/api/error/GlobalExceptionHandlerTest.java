@@ -4,6 +4,7 @@ import dev.erkut.customerservice.customer.domain.exception.AddressNotFoundExcept
 import dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
+import dev.erkut.customerservice.security.InvalidCurrentUserException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -44,6 +45,14 @@ class GlobalExceptionHandlerTest {
                 new DataIntegrityViolationException("constraint"));
 
         assertResponse(response, HttpStatus.CONFLICT, "Request conflicts with existing data");
+    }
+
+    @Test
+    void invalidCurrentUserMapsToUnauthorized() {
+        var response = handler.handleInvalidCurrentUser(
+                new InvalidCurrentUserException("invalid user"));
+
+        assertResponse(response, HttpStatus.UNAUTHORIZED, "Authentication required");
     }
 
     private static void assertResponse(

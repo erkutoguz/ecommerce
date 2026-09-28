@@ -30,7 +30,8 @@ class CurrentCustomerResolverTest {
     @Test
     void customerId_shouldResolveCustomerIdFromDistinctAuthUserId() {
         when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
-        when(customerClient.getByAuthUserId(AUTH_USER_ID))
+        when(currentUser.accessToken()).thenReturn("access-token");
+        when(customerClient.getByAuthUserId(AUTH_USER_ID, "access-token"))
                 .thenReturn(new CustomerLookupResponse(CUSTOMER_ID, CustomerStatus.ACTIVE));
 
         assertEquals(CUSTOMER_ID, resolver.customerId());
@@ -39,7 +40,8 @@ class CurrentCustomerResolverTest {
     @Test
     void customerId_inactiveCustomer_shouldThrowInvalidCustomerStateException() {
         when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
-        when(customerClient.getByAuthUserId(AUTH_USER_ID))
+        when(currentUser.accessToken()).thenReturn("access-token");
+        when(customerClient.getByAuthUserId(AUTH_USER_ID, "access-token"))
                 .thenReturn(new CustomerLookupResponse(CUSTOMER_ID, CustomerStatus.INACTIVE));
 
         assertThrows(InvalidCustomerStateException.class, resolver::customerId);

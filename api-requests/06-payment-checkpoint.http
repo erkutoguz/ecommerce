@@ -3,6 +3,8 @@
 # If this returns 404, payment creation is still in progress; run the request again shortly.
 # Produces: checkoutUrl captured from the persisted Payment response.
 
+< {% client.global.clear("checkoutUrl"); %}
+
 GET {{baseUrl}}/payments/order/{{orderId}}
 Authorization: Bearer {{accessToken}}
 
@@ -12,5 +14,10 @@ Authorization: Bearer {{accessToken}}
         client.assert(response.body.orderId != null, "Order id must be present");
         client.assert(response.body.checkoutUrl != null, "Checkout URL must be present");
     });
-    client.global.set("checkoutUrl", response.body.checkoutUrl);
+    if (response.status === 200 && response.body.checkoutUrl != null) {
+        client.global.set("checkoutUrl", response.body.checkoutUrl);
+    } else {
+        client.global.clear("checkoutUrl");
+        client.log("Payment is not ready yet; run this request again shortly.");
+    }
 %}

@@ -144,6 +144,25 @@ class CartServiceTest {
     }
 
     @Test
+    void getCartByIdForAdminUsesOwnershipIndependentQuery() {
+        Cart cart = Cart.create(CUSTOMER_ID, CREATED_AT);
+        when(cartRepository.findWithCartItemsById(CART_ID)).thenReturn(Optional.of(cart));
+
+        Cart result = cartService.getCartByIdForAdmin(CART_ID);
+
+        assertSame(cart, result);
+        verify(cartRepository).findWithCartItemsById(CART_ID);
+        verify(cartRepository, never()).findWithCartItemsByIdAndCustomerId(any(UUID.class), any(UUID.class));
+    }
+
+    @Test
+    void getCartByIdForAdmin_missingCart_shouldThrowCartNotFoundException() {
+        when(cartRepository.findWithCartItemsById(CART_ID)).thenReturn(Optional.empty());
+
+        assertThrows(CartNotFoundException.class, () -> cartService.getCartByIdForAdmin(CART_ID));
+    }
+
+    @Test
     void addCartItem_activeExistingProduct_shouldCallTransactionalServiceAfterRemoteValidation() {
         when(productClient.getProductsByIds(any(ProductLookupRequest.class)))
                 .thenReturn(List.of(activeProduct(PRODUCT_A)));

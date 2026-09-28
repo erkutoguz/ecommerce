@@ -1,6 +1,8 @@
 package dev.erkut.customerservice.customer.persistence;
 
 import dev.erkut.customerservice.customer.domain.Customer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,4 +14,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
     boolean existsByEmail(String email);
     boolean existsByAuthUserId(UUID authUserId);
     Optional<Customer> findByAuthUserId(UUID authUserId);
+    Optional<Customer> findByIdAndAuthUserId(UUID customerId, UUID authUserId);
+    Page<Customer> findByAuthUserId(UUID authUserId, Pageable pageable);
 }

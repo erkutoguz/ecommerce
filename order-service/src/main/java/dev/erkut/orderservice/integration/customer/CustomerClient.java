@@ -2,6 +2,7 @@ package dev.erkut.orderservice.integration.customer;
 
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
@@ -16,9 +17,12 @@ public class CustomerClient {
         this.client = clientBuilder.baseUrl(customerBaseUrl).build();
     }
 
-    public CustomerLookupResponse getByAuthUserId(UUID authUserId) {
+    public CustomerLookupResponse getByAuthUserId(UUID authUserId, String accessToken) {
         try {
-            return this.client.get().uri("/internal/by-auth-user/{authUserId}", authUserId).retrieve()
+            return this.client.get()
+                    .uri("/internal/by-auth-user/{authUserId}", authUserId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .retrieve()
                     .onStatus(
                             status -> status.value() == 404,
                             (req, res) -> {

@@ -1,0 +1,235 @@
+### Register User A
+
+< {%
+    client.global.clear("ownershipEmailA");
+    client.global.clear("ownershipEmailB");
+    client.global.clear("ownershipPassword");
+    client.global.clear("tokenA");
+    client.global.clear("tokenB");
+    client.global.clear("cartAId");
+
+    const suffix = Date.now();
+
+    client.global.set("ownershipPassword", "E2eTestPassword123!");
+    client.global.set("ownershipEmailA", "ownership-a-" + suffix + "@example.com");
+    client.global.set("ownershipEmailB", "ownership-b-" + suffix + "@example.com");
+%}
+
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{ownershipEmailA}}",
+  "password": "{{ownershipPassword}}"
+}
+
+> {%
+    client.test("User A registration succeeds", function () {
+        client.assert(
+            response.status === 200,
+            "Expected User A registration to return 200"
+        );
+    });
+%}
+
+
+### Login User A
+
+< {%
+    client.global.clear("tokenA");
+%}
+
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{ownershipEmailA}}",
+  "password": "{{ownershipPassword}}"
+}
+
+> {%
+    const succeeded =
+        response.status === 200 &&
+        response.body.accessToken != null;
+
+    client.test("User A login succeeds", function () {
+        client.assert(succeeded, "Expected User A login to succeed");
+    });
+
+    if (succeeded) {
+        client.global.set("tokenA", response.body.accessToken);
+    } else {
+        client.global.clear("tokenA");
+    }
+%}
+
+
+### Poll User A Customer provisioning
+# Repeat until the registered User A Customer appears.
+
+GET {{baseUrl}}/customers?page=0&size=100
+Authorization: Bearer {{tokenA}}
+
+> {%
+    const succeeded =
+        response.status === 200 &&
+        Array.isArray(response.body.content);
+
+    client.test("User A Customer list is available", function () {
+        client.assert(
+            succeeded,
+            "Expected a Customer list response for User A"
+        );
+    });
+
+    if (succeeded) {
+        const customer = response.body.content.find(
+            item => item.email === client.global.get("ownershipEmailA")
+        );
+
+        if (customer != null) {
+            client.log("User A Customer provisioned.");
+        } else {
+            client.log(
+                "User A Customer not provisioned yet; run this request again."
+            );
+        }
+    }
+%}
+
+
+### User A current Cart
+# Run only after User A Customer provisioning succeeds.
+
+< {%
+    client.global.clear("cartAId");
+%}
+
+GET {{baseUrl}}/carts/current
+Authorization: Bearer {{tokenA}}
+
+> {%
+    const succeeded =
+        response.status === 200 &&
+        response.body.id != null;
+
+    client.test("User A current Cart is available", function () {
+        client.assert(
+            succeeded,
+            "Expected User A current Cart to return 200 with an id"
+        );
+    });
+
+    if (succeeded) {
+        client.global.set("cartAId", response.body.id);
+    } else {
+        client.global.clear("cartAId");
+    }
+%}
+
+
+### Register User B
+
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{ownershipEmailB}}",
+  "password": "{{ownershipPassword}}"
+}
+
+> {%
+    client.test("User B registration succeeds", function () {
+        client.assert(
+            response.status === 200,
+            "Expected User B registration to return 200"
+        );
+    });
+%}
+
+
+### Login User B
+
+< {%
+    client.global.clear("tokenB");
+%}
+
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{ownershipEmailB}}",
+  "password": "{{ownershipPassword}}"
+}
+
+> {%
+    const succeeded =
+        response.status === 200 &&
+        response.body.accessToken != null;
+
+    client.test("User B login succeeds", function () {
+        client.assert(succeeded, "Expected User B login to succeed");
+    });
+
+    if (succeeded) {
+        client.global.set("tokenB", response.body.accessToken);
+    } else {
+        client.global.clear("tokenB");
+    }
+%}
+
+
+### Poll User B Customer provisioning
+# IMPORTANT:
+# Repeat until User B Customer appears.
+# Otherwise the final 404 could come from missing Customer provisioning
+# instead of Cart ownership enforcement.
+
+GET {{baseUrl}}/customers?page=0&size=100
+Authorization: Bearer {{tokenB}}
+
+> {%
+    const succeeded =
+        response.status === 200 &&
+        Array.isArray(response.body.content);
+
+    client.test("User B Customer list is available", function () {
+        client.assert(
+            succeeded,
+            "Expected a Customer list response for User B"
+        );
+    });
+
+    if (succeeded) {
+        const customer = response.body.content.find(
+            item => item.email === client.global.get("ownershipEmailB")
+        );
+
+        if (customer != null) {
+            client.log(
+                "User B Customer provisioned. Ownership check is now valid."
+            );
+        } else {
+            client.log(
+                "User B Customer not provisioned yet; run this request again."
+            );
+        }
+    }
+%}
+
+
+### User B attempts to read User A's Cart
+# Run only after User B Customer provisioning succeeds.
+# This 404 must come from ownership filtering, not missing Customer provisioning.
+
+GET {{baseUrl}}/carts/{{cartAId}}
+Authorization: Bearer {{tokenB}}
+
+> {%
+    client.test("foreign Cart is hidden", function () {
+        client.assert(
+            response.status === 404,
+            "Expected User B access to User A Cart to return 404"
+        );
+    });
+%}

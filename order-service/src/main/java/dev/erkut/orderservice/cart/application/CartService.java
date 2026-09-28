@@ -52,6 +52,12 @@ public class CartService {
                 .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
     }
 
+    @Transactional(readOnly = true)
+    public Cart getCartByIdForAdmin(UUID cartId) {
+        return cartRepository.findWithCartItemsById(cartId)
+                .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
+    }
+
     public Cart addCartItem(
             UUID cartId,
             UUID customerId,

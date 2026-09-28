@@ -8,6 +8,8 @@
 - `payment-service/.env.local` containing runtime-only `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. No secret belongs in this directory.
 - IntelliJ HTTP Client (the files use its response handlers and `http-client.env.json`).
 
+Select the `local` JetBrains HTTP Client environment before running requests. Its static configuration comes from `api-requests/http-client.env.json`; do not rely on ignored IDE workspace state. Runtime values such as tokens and resource IDs are captured by the request handlers.
+
 ## Start
 
 From the repository root:
@@ -24,6 +26,12 @@ docker compose up -d --build
 ```
 
 The volume reset is development-only and removes the local PostgreSQL data volumes.
+
+## Execution model
+
+`Auth.http` is the bootstrap. It creates a fresh user, logs in, and must be repeated until Customer provisioning is visible. The standard happy path is then run through `00-health.http` and `01`–`07`; `01-customer.http` is optional inspection and is not a prerequisite for Cart or Order security.
+
+`08-out-of-stock-flow.http`, `09-payment-expiry-flow.http`, and `10-ownership-flow.http` are independent scenarios. Each starts by clearing its own runtime IDs, but each requires the authenticated bootstrap state described in its file. They are not continuation steps after the happy path.
 
 ## Full end-to-end verification
 
@@ -57,7 +65,7 @@ payment service, and then run the E2E command. Never commit either secret.
 
 ## Authentication
 
-Run `Auth.http` to register and log in through the Gateway. Registration provisions a Customer asynchronously through Kafka. Repeat the authenticated Customer lookup in `Auth.http` until the registered email appears, then use its `customerId` in the remaining requests. The Gateway validates the token and enforces the configured USER/ADMIN route policy.
+Run `Auth.http` to register and log in through the Gateway. Registration provisions a Customer asynchronously through Kafka. Repeat the authenticated Customer lookup in `Auth.http` until the registered email appears. The captured `customerId` is useful for inspecting `01-customer.http`; authenticated Cart and Order requests derive Customer identity from the JWT and do not send `customerId` query parameters. The Gateway validates the token and enforces the configured USER/ADMIN route policy.
 
 ## Happy path
 
@@ -65,7 +73,7 @@ Run the files in this order:
 
 1. `00-health.http`
 2. `Auth.http` (register, login, and poll Customer provisioning)
-3. `01-customer.http`
+3. `01-customer.http` (optional Customer inspection)
 4. `02-products.http`
 5. `03-cart.http`
 6. `04-checkout.http`
@@ -74,6 +82,10 @@ Run the files in this order:
 9. `06-payment-checkpoint.http`
 10. Open the captured `checkoutUrl` in a browser and complete Stripe Checkout manually.
 11. `07-happy-path-verification.http`
+
+## Ownership smoke flow
+
+Run `10-ownership-flow.http` after the stack is ready. It registers and logs in two temporary users, waits for User A's Customer provisioning, obtains User A's current Cart, and verifies that User B receives `404` when requesting that Cart with User B's JWT. The flow does not call the Customer Service internal endpoint through the Gateway.
 
 Checkout immediately returns an `OrderResponse` and captures `orderId`. Stock reservation, payment creation, and later order/cart transitions are asynchronous; re-run status requests after Kafka has processed the events.
 
@@ -89,11 +101,11 @@ After checkout, wait a few seconds and run `06-payment-checkpoint.http`. It call
 
 ## Out-of-stock flow
 
-Run `Auth.http` and `01-customer.http` first, then run `08-out-of-stock-flow.http`. After Kafka processing, expect `OrderStatus.REJECTED` with `OUT_OF_STOCK` and `CartStatus.ACTIVE` (cart reopened). No Stripe payment should be created for this order.
+Run `Auth.http` first and repeat its Customer provisioning request until the current user is visible. `01-customer.http` is optional inspection. Then run `08-out-of-stock-flow.http` independently. After Kafka processing, expect `OrderStatus.REJECTED` with `OUT_OF_STOCK` and `CartStatus.ACTIVE` (cart reopened). No Stripe payment should be created for this order. Saga `FAILED` is verified through existing development tooling because it is not exposed by the public API.
 
 ## Payment expiry flow
 
-Run `Auth.http` and `01-customer.http` first, then run `09-payment-expiry-flow.http`. Wait for its payment checkpoint to return `AWAITING_CUSTOMER_ACTION`, then query the resulting `provider_payment_id` through the documented development-only DB path and expire the still-open Checkout Session using Stripe’s supported API operation:
+Run `Auth.http` first and repeat its Customer provisioning request until the current user is visible. `01-customer.http` is optional inspection. Then run `09-payment-expiry-flow.http` with the same one-unit Product A fixture used by the shell flow. Wait for its payment checkpoint to return `AWAITING_CUSTOMER_ACTION`, then query the resulting `provider_payment_id` through the documented development-only DB path and expire the still-open Checkout Session using Stripe’s supported API operation:
 
 ```bash
 curl -X POST "https://api.stripe.com/v1/checkout/sessions/<provider_payment_id>/expire" \

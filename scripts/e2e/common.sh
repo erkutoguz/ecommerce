@@ -258,9 +258,8 @@ assert_clean_stock() {
 }
 
 get_clean_cart() {
-    local customer_id="$1"
-    http_get_auth "$BASE_URL/carts/current?customerId=$customer_id"
-    [[ "$LAST_STATUS" == "200" ]] || fail "Could not get current cart for customer $customer_id (HTTP $LAST_STATUS)"
+    http_get_auth "$BASE_URL/carts/current"
+    [[ "$LAST_STATUS" == "200" ]] || fail "Could not get current cart (HTTP $LAST_STATUS)"
     [[ "$(json_value '.status')" == "ACTIVE" ]] || fail "E2E environment is not clean: cart is not ACTIVE. Run: make e2e-reset"
     [[ "$(json_value '.cartItems | length')" == "0" ]] || fail "E2E environment is not clean: cart contains items. Run: make e2e-reset"
     CART_ID="$(json_value '.id')"

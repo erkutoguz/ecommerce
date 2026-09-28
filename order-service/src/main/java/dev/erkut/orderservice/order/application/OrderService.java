@@ -175,11 +175,16 @@ public class OrderService {
             throw new IllegalArgumentException("Customer id cannot be null");
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending()
-                .and(Sort.by(Sort.Direction.DESC, "id")));
+        Pageable pageable = orderPageable(page, size);
 
         Page<Order> orders = orderRepository.findAllByCustomerId(customerId, pageable);
 
+        return orders.map(OrderMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> getAllOrders(int page, int size) {
+        Page<Order> orders = orderRepository.findAllWithItems(orderPageable(page, size));
         return orders.map(OrderMapper::toResponse);
     }
 
@@ -191,6 +196,19 @@ public class OrderService {
                 );
 
         return OrderMapper.toResponse(order);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderByIdForAdmin(UUID orderId) {
+        Order order = orderRepository.findWithItemsById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+
+        return OrderMapper.toResponse(order);
+    }
+
+    private Pageable orderPageable(int page, int size) {
+        return PageRequest.of(page, size, Sort.by("createdAt").descending()
+                .and(Sort.by(Sort.Direction.DESC, "id")));
     }
 
     private Order findOrderById(UUID orderId) {

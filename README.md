@@ -121,7 +121,7 @@ Create local RSA key files for JWT signing and verification:
 ~/.ecommerce-keys/public.pem
 ```
 
-The Auth Service reads both keys; the API Gateway receives only `public.pem`. Keep the directory outside the repository and never commit its contents. Never commit real credentials. Start the stack directly with:
+The Auth Service reads both keys; the API Gateway, Customer Service, and Order Service receive only `public.pem`. Keep the directory outside the repository and never commit its contents. Never commit real credentials. Start the stack directly with:
 
 ```bash
 docker compose up -d --build
@@ -136,9 +136,12 @@ The Gateway is available at `http://localhost:4002`. Common routes are:
 ```text
 GET  /products
 GET  /customers/{customerId}
-GET  /carts/current?customerId=...
+GET  /admin/customers
+GET  /carts/current
 POST /carts/{cartId}/checkout
 GET  /orders/{orderId}
+GET  /admin/orders
+GET  /admin/carts/{cartId}
 GET  /payments/order/{orderId}
 POST /auth/register
 POST /auth/login
@@ -157,9 +160,50 @@ The Auth Service uses the configured Spring Security `PasswordEncoder` and issue
 
 The Gateway is a stateless Spring Security OAuth2 Resource Server. It validates the RSA signature, RS256 algorithm, timestamp/expiration, issuer, and audience. `USER` and `ADMIN` roles map to `ROLE_USER` and `ROLE_ADMIN`.
 
-Gateway authorization rules allow public registration/login, public product GET requests, and the Stripe webhook from the JWT-authentication perspective. Customer, order, cart, and payment routes require authentication; product mutations require `ADMIN`. Other requests are denied.
+Gateway authorization is coarse route and role authorization: registration/login, product GET requests, and the Stripe webhook are public from the JWT perspective; Customer, Order, Cart, and Payment routes require authentication; product mutations and `/admin/**` require `ADMIN`; other requests are denied. Gateway checks are defense in depth and are not the only JWT validation boundary.
 
-Business services are not yet independent JWT Resource Servers and resource-level ownership checks are not implemented. Those are planned follow-up work; the current Gateway protects the public HTTP surface.
+Customer Service and Order Service are independent stateless OAuth2 Resource Servers. Each validates the RSA public-key signature with RS256, issuer `ecommerce-auth`, audience `ecommerce-api`, and standard timestamp/expiration claims before applying service-level authorization. Docker Compose mounts only `public.pem` into these services.
+
+Authentication, ownership authorization, and role authorization are separate concerns. The identity and ownership model is:
+
+```text
+JWT.sub
+  → AuthUser.id
+  → Customer.authUserId
+  → Customer.id
+```
+
+`AuthUser.id` and `Customer.id` are different service-owned identities. Client-supplied Customer, Cart, Address, and Order IDs identify requested resources but do not establish ownership.
+
+Normal user-facing APIs remain owner-scoped:
+
+```text
+/customers/**
+/orders/**
+/carts/**
+  → authenticated JWT
+  → current Customer resolution
+  → ownership check
+```
+
+Customer Service protects Customer and nested address operations, and `GET /customers` returns only the authenticated Customer. Non-owner Customer and Address resources use not-found semantics. Customer creation remains Kafka-driven through Auth registration; there is no public Customer creation flow.
+
+For Order Service, the authenticated Customer owns `Cart.customerId` and `Order.customerId`. Checkout remains tied to that Customer. Order Service resolves the Customer through Customer Service by forwarding the same validated bearer token; Customer Service validates it independently and requires `JWT.sub` to match the internal lookup's `authUserId` path value.
+
+Administrative access is intentionally separated from owner-facing APIs. An `ADMIN` token does not bypass ownership checks on `/customers/**`, `/orders/**`, or `/carts/**`. Wide administrative reads and Customer deactivation are available only through explicit `/admin/**` APIs:
+
+```text
+GET  /admin/customers
+GET  /admin/customers/{customerId}
+POST /admin/customers/{customerId}/deactivate
+
+GET  /admin/orders
+GET  /admin/orders/{orderId}
+
+GET  /admin/carts/{cartId}
+```
+
+All require `ROLE_ADMIN`. Admin APIs can list/read Customers, deactivate any Customer, list/read Orders, and read any Cart. Admin Cart access is read-only; there are no admin address mutation, Cart mutation, checkout, or Order lifecycle APIs. Stock, payment, Order confirmation/rejection, Cart completion/reopening, Saga transitions, Customer provisioning, and related Kafka workflows remain system-controlled.
 
 ## Kafka Topology
 
@@ -193,7 +237,7 @@ Copy the printed `whsec_...` into `payment-service/.env.local` as `STRIPE_WEBHOO
 
 ## End-to-End Testing
 
-The scripts call the Gateway, create a unique Auth user, log in, capture a JWT, poll asynchronous Customer provisioning, and use the resulting Customer ID for authenticated commerce requests. They use read-only development DB queries only for internal states that have no public endpoint. They do not expose `provider_payment_id` through production APIs.
+The scripts call the Gateway, create a unique Auth user, log in, capture a JWT, and poll asynchronous Customer provisioning. Authenticated commerce requests use the JWT; the resulting Customer ID is retained only for provisioning correlation and does not control Cart or Order requests. They use read-only development DB queries only for internal states that have no public endpoint. They do not expose `provider_payment_id` through production APIs.
 
 The reusable bootstrap is:
 
@@ -295,6 +339,9 @@ The repository includes:
 - Stripe webhook signature tests
 - Auth Service PostgreSQL/Flyway integration tests
 - Gateway JWT and authorization integration tests
+- Customer JWT, ownership, and CustomerAddress authorization tests
+- Order/Cart ownership and bearer-token propagation tests
+- USER vs ADMIN tests for Customer, Order, Cart, and Gateway `/admin/**` routes
 - Real Stripe E2E flows
 
 Run the multi-module suite with Docker available for Testcontainers:
@@ -305,7 +352,7 @@ mvn test
 
 ## Current State
 
-Implemented and locally verified: Auth Service registration/login and JWT issuance, transactional Auth Outbox, asynchronous Customer provisioning with Inbox idempotency, deterministic Kafka topic initialization, Gateway JWT validation and authorization, cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
+Implemented and locally verified: Auth Service registration/login and JWT issuance, transactional Auth Outbox, asynchronous Customer provisioning with Inbox idempotency, deterministic Kafka topic initialization, Gateway JWT validation and authorization, independent Customer and Order Service JWT validation, Customer and Cart/Order ownership authorization, Customer + Order RBAC with explicit ADMIN APIs, Gateway ADMIN defense in depth, cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
 
 This is a development/portfolio project, not a production-scale performance claim.
 
@@ -313,8 +360,6 @@ This is a development/portfolio project, not a production-scale performance clai
 
 Not implemented yet:
 
-- Resource Server validation inside business services
-- Resource ownership authorization
 - Refresh tokens and explicit token revocation/logout
 - JWKS, key rotation, and MFA
 - Rate limiting

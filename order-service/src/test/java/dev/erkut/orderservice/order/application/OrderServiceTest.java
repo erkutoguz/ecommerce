@@ -209,6 +209,39 @@ class OrderServiceTest {
     }
 
     @Test
+    void getAllOrdersUsesUnfilteredPaginatedQueryWithItems() {
+        Order first = validOrder(CREATED_AT);
+        Order second = validOrder(CREATED_AT.plusSeconds(1));
+        when(orderRepository.findAllWithItems(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(first, second)));
+
+        Page<OrderResponse> response = orderService.getAllOrders(0, 10);
+
+        assertEquals(2, response.getTotalElements());
+        verify(orderRepository).findAllWithItems(any(Pageable.class));
+        verify(orderRepository, never()).findAllByCustomerId(any(UUID.class), any(Pageable.class));
+    }
+
+    @Test
+    void getOrderByIdForAdminUsesOwnershipIndependentQuery() {
+        Order order = validOrder(CREATED_AT);
+        when(orderRepository.findWithItemsById(ORDER_ID)).thenReturn(Optional.of(order));
+
+        OrderResponse response = orderService.getOrderByIdForAdmin(ORDER_ID);
+
+        assertEquals(CUSTOMER_ID, response.customerId());
+        verify(orderRepository).findWithItemsById(ORDER_ID);
+    }
+
+    @Test
+    void getOrderByIdForAdminUnknownOrderShouldThrowNotFound() {
+        when(orderRepository.findWithItemsById(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(OrderNotFoundException.class,
+                () -> orderService.getOrderByIdForAdmin(ORDER_ID));
+    }
+
+    @Test
     void createFromCheckout_duplicateProduct_shouldThrowWithoutSaving() {
         List<OrderLineSnapshot> snapshots = List.of(
                 new OrderLineSnapshot(PRODUCT_A, "Product A", new BigDecimal("100.00"), 1),

@@ -108,13 +108,22 @@ class CustomerServiceTest {
     @Test
     void getCustomerByIdReturnsMappedCustomerOrThrowsWhenMissing() {
         Customer customer = customer("Ada Lovelace", "ada@example.com");
-        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(Optional.of(customer));
 
-        assertEquals("ada@example.com", customerService().getCustomerById(CUSTOMER_ID).email());
+        assertEquals("ada@example.com", customerService().getCustomerById(CUSTOMER_ID, AUTH_USER_ID).email());
 
-        when(customerRepository.findById(OTHER_CUSTOMER_ID)).thenReturn(Optional.empty());
+        when(customerRepository.findByIdAndAuthUserId(OTHER_CUSTOMER_ID, AUTH_USER_ID)).thenReturn(Optional.empty());
         assertThrows(CustomerNotFoundException.class,
-                () -> customerService().getCustomerById(OTHER_CUSTOMER_ID));
+                () -> customerService().getCustomerById(OTHER_CUSTOMER_ID, AUTH_USER_ID));
+    }
+
+    @Test
+    void getCustomerByIdDoesNotReturnCustomerForAnotherAuthUser() {
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, OTHER_CUSTOMER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(CustomerNotFoundException.class,
+                () -> customerService().getCustomerById(CUSTOMER_ID, OTHER_CUSTOMER_ID));
     }
 
     @Test
@@ -142,16 +151,16 @@ class CustomerServiceTest {
     void getCustomersMapsPageAndUsesCreatedAtAndIdDescendingSort() {
         Customer first = customer("Ada", "ada@example.com");
         Customer second = customer("Grace", "grace@example.com");
-        when(customerRepository.findAll(any(Pageable.class)))
+        when(customerRepository.findByAuthUserId(eq(AUTH_USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(first, second)));
 
-        var response = customerService().getCustomers(2, 25);
+        var response = customerService().getCustomers(2, 25, AUTH_USER_ID);
 
         assertEquals(2, response.getTotalElements());
         assertEquals("ada@example.com", response.getContent().getFirst().email());
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(customerRepository).findAll(pageable.capture());
+        verify(customerRepository).findByAuthUserId(eq(AUTH_USER_ID), pageable.capture());
         assertEquals(2, pageable.getValue().getPageNumber());
         assertEquals(25, pageable.getValue().getPageSize());
         assertEquals(List.of("createdAt", "id"),
@@ -160,11 +169,81 @@ class CustomerServiceTest {
     }
 
     @Test
+    void getCustomersForAdminUsesUnfilteredPaginatedRepositoryQuery() {
+        Customer first = customer("Ada", "ada@example.com");
+        Customer second = customer("Grace", "grace@example.com");
+        when(customerRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(first, second)));
+
+        var response = customerService().getCustomersForAdmin(1, 25);
+
+        assertEquals(2, response.getTotalElements());
+        verify(customerRepository).findAll(any(Pageable.class));
+        verify(customerRepository, never()).findByAuthUserId(any(UUID.class), any(Pageable.class));
+    }
+
+    @Test
+    void adminCustomerReadDoesNotRequireAuthUserOwnership() throws Exception {
+        Customer customer = customer("Ada", "ada@example.com");
+        setCustomerId(customer, OTHER_CUSTOMER_ID);
+        when(customerRepository.findById(OTHER_CUSTOMER_ID)).thenReturn(Optional.of(customer));
+
+        var response = customerService().getCustomerByIdForAdmin(OTHER_CUSTOMER_ID);
+
+        assertEquals(OTHER_CUSTOMER_ID, response.customerId());
+        verify(customerRepository).findById(OTHER_CUSTOMER_ID);
+        verify(customerRepository, never()).findByAuthUserId(any(UUID.class));
+    }
+
+    @Test
+    void adminCustomerReadUnknownCustomerThrowsNotFound() {
+        when(customerRepository.findById(OTHER_CUSTOMER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(CustomerNotFoundException.class,
+                () -> customerService().getCustomerByIdForAdmin(OTHER_CUSTOMER_ID));
+    }
+
+    @Test
+    void adminDeactivationReusesCustomerDomainTransitionWithoutOwnershipLookup() throws Exception {
+        Customer customer = customer("Ada", "ada@example.com");
+        setCustomerId(customer, OTHER_CUSTOMER_ID);
+        when(customerRepository.findById(OTHER_CUSTOMER_ID)).thenReturn(Optional.of(customer));
+
+        var response = customerService().deactivateCustomerForAdmin(OTHER_CUSTOMER_ID);
+
+        assertEquals(CustomerStatus.INACTIVE, response.status());
+        verify(customerRepository).findById(OTHER_CUSTOMER_ID);
+        verify(customerRepository, never()).findByIdAndAuthUserId(any(UUID.class), any(UUID.class));
+    }
+
+    @Test
+    void allCustomerMutationsRequireTheAuthenticatedCustomer() {
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, OTHER_CUSTOMER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(CustomerNotFoundException.class,
+                () -> customerService().deactivateCustomer(CUSTOMER_ID, OTHER_CUSTOMER_ID));
+        assertThrows(CustomerNotFoundException.class,
+                () -> customerService().addCustomerAddress(
+                        CUSTOMER_ID,
+                        OTHER_CUSTOMER_ID,
+                        new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom")));
+        assertThrows(CustomerNotFoundException.class,
+                () -> customerService().removeCustomerAddress(
+                        CUSTOMER_ID,
+                        OTHER_CUSTOMER_ID,
+                        UUID.randomUUID()));
+
+        verify(customerRepository, never()).flush();
+        verify(customerRepository, never()).save(any(Customer.class));
+    }
+
+    @Test
     void deactivateCustomerMutatesManagedCustomerWithoutSavingAgain() {
         Customer customer = customer("Ada", "ada@example.com");
-        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(Optional.of(customer));
 
-        var response = customerService().deactivateCustomer(CUSTOMER_ID);
+        var response = customerService().deactivateCustomer(CUSTOMER_ID, AUTH_USER_ID);
 
         assertEquals(CustomerStatus.INACTIVE, response.status());
         assertEquals(CustomerStatus.INACTIVE, customer.getStatus());
@@ -175,17 +254,18 @@ class CustomerServiceTest {
     @Test
     void addCustomerAddressLoadsAggregateFlushesAndReturnsAddressResponseWithoutSavingCustomer() {
         Customer customer = customer("Ada", "ada@example.com");
-        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(Optional.of(customer));
 
         CustomerAddressResponse response = customerService().addCustomerAddress(
-                CUSTOMER_ID, new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom"));
+                CUSTOMER_ID, AUTH_USER_ID,
+                new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom"));
 
         assertEquals("1 Main Street", response.fullAddress());
         assertEquals("London", response.city());
         assertEquals(1, customer.getAddresses().size());
 
         InOrder order = inOrder(customerRepository);
-        order.verify(customerRepository).findById(CUSTOMER_ID);
+        order.verify(customerRepository).findByIdAndAuthUserId(CUSTOMER_ID, AUTH_USER_ID);
         order.verify(customerRepository).flush();
         verify(customerRepository, never()).save(any(Customer.class));
     }
@@ -195,9 +275,9 @@ class CustomerServiceTest {
         Customer customer = customer("Ada", "ada@example.com");
         var address = customer.addAddress("1 Main Street", "London", "United Kingdom", CREATED_AT.plusSeconds(1));
         setAddressId(address, UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"));
-        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(Optional.of(customer));
 
-        customerService().removeCustomerAddress(CUSTOMER_ID, address.getId());
+        customerService().removeCustomerAddress(CUSTOMER_ID, AUTH_USER_ID, address.getId());
 
         assertTrue(customer.getAddresses().isEmpty());
         verify(customerRepository, never()).save(any(Customer.class));
@@ -207,12 +287,13 @@ class CustomerServiceTest {
     void addressMutationsPropagateInvalidCustomerState() {
         Customer customer = customer("Ada", "ada@example.com");
         customer.deactivateCustomer(CREATED_AT.plusSeconds(1));
-        when(customerRepository.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer));
+        when(customerRepository.findByIdAndAuthUserId(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(Optional.of(customer));
 
         assertThrows(InvalidCustomerStateException.class, () -> customerService().addCustomerAddress(
-                CUSTOMER_ID, new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom")));
+                CUSTOMER_ID, AUTH_USER_ID,
+                new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom")));
         assertThrows(InvalidCustomerStateException.class, () -> customerService().removeCustomerAddress(
-                CUSTOMER_ID, UUID.randomUUID()));
+                CUSTOMER_ID, AUTH_USER_ID, UUID.randomUUID()));
         verify(customerRepository, never()).flush();
         verify(customerRepository, never()).save(any(Customer.class));
     }

@@ -92,6 +92,12 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void adminRouteWithoutTokenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/customers/test"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void malformedBearerTokenReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/orders/test")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer malformed-token"))
@@ -102,6 +108,36 @@ class ApiGatewayApplicationTests {
     void validUserTokenPassesAuthenticatedRoute() throws Exception {
         mockMvc.perform(get("/orders/test")
                         .header(HttpHeaders.AUTHORIZATION, bearerToken(userToken())))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void userCannotAccessAdminRoutes() throws Exception {
+        mockMvc.perform(get("/admin/customers/test")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(userToken())))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/admin/orders/test")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(userToken())))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/admin/carts/test")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(userToken())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminTokenPassesAdminRoutes() throws Exception {
+        mockMvc.perform(get("/admin/customers/test")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(adminToken())))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/admin/orders/test")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(adminToken())))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/admin/carts/test")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(adminToken())))
                 .andExpect(status().isOk());
     }
 
@@ -265,7 +301,7 @@ class ApiGatewayApplicationTests {
 
     @RestController
     static class TestRouteController {
-        @RequestMapping({"/auth/**", "/products/**", "/orders/**", "/payments/**"})
+        @RequestMapping({"/auth/**", "/products/**", "/orders/**", "/payments/**", "/admin/**"})
         String respondOk() {
             return "ok";
         }
