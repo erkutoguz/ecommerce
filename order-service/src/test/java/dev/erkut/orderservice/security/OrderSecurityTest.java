@@ -3,6 +3,7 @@ package dev.erkut.orderservice.security;
 import dev.erkut.orderservice.order.application.OrderService;
 import dev.erkut.orderservice.order.api.OrderController;
 import dev.erkut.orderservice.order.api.admin.AdminOrderController;
+import dev.erkut.orderservice.order.api.internal.InternalOrderController;
 import dev.erkut.orderservice.cart.api.admin.AdminCartController;
 import dev.erkut.orderservice.cart.application.CartService;
 import dev.erkut.orderservice.cart.domain.Cart;
@@ -51,7 +52,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({OrderController.class, AdminOrderController.class, AdminCartController.class})
+@WebMvcTest({OrderController.class, AdminOrderController.class, AdminCartController.class, InternalOrderController.class})
 @Import({SecurityConfig.class, JwtConfig.class, OrderExceptionHandler.class, CartExceptionHandler.class})
 @EnableWebSecurity
 class OrderSecurityTest {
@@ -211,6 +212,41 @@ class OrderSecurityTest {
         mockMvc.perform(get("/admin/carts/{cartId}", cartId)
                         .header("Authorization", bearerToken(adminToken())))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void internalOrderOwnershipUsesResolvedCustomer() throws Exception {
+        java.util.UUID orderId = java.util.UUID.randomUUID();
+        java.util.UUID customerId = java.util.UUID.randomUUID();
+        when(currentCustomerResolver.customerId()).thenReturn(customerId);
+        when(orderService.belongsToCustomer(orderId, customerId)).thenReturn(true);
+
+        mockMvc.perform(get("/internal/orders/{orderId}/ownership", orderId)
+                        .header("Authorization", bearerToken(userToken())))
+                .andExpect(status().isOk());
+
+        verify(currentCustomerResolver).customerId();
+        verify(orderService).belongsToCustomer(orderId, customerId);
+    }
+
+    @Test
+    void internalOrderOwnershipReturnsNotFoundForForeignOrder() throws Exception {
+        java.util.UUID orderId = java.util.UUID.randomUUID();
+        java.util.UUID customerId = java.util.UUID.randomUUID();
+        when(currentCustomerResolver.customerId()).thenReturn(customerId);
+        when(orderService.belongsToCustomer(orderId, customerId)).thenReturn(false);
+
+        mockMvc.perform(get("/internal/orders/{orderId}/ownership", orderId)
+                        .header("Authorization", bearerToken(userToken())))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void internalOrderOwnershipRequiresJwt() throws Exception {
+        mockMvc.perform(get("/internal/orders/{orderId}/ownership", java.util.UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(orderService, currentCustomerResolver);
     }
 
     @Test

@@ -276,17 +276,25 @@ services:
       context: ./payment-service
     ports:
       - "4007:4007"
+    volumes:
+      - ${HOME}/.ecommerce-keys/public.pem:/run/secrets/auth-keys/public.pem:ro
     env_file:
       - ./payment-service/.env.local
     environment:
+      ORDER_SERVICE_BASE_URL: http://order-service:4000
       SPRING_DATASOURCE_URL: jdbc:postgresql://payment-db:5432/payment
       SPRING_DATASOURCE_USERNAME: payment
       SPRING_DATASOURCE_PASSWORD: payment-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
+      JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
     depends_on:
       payment-db:
         condition: service_healthy
+      customer-service:
+        condition: service_started
+      order-service:
+        condition: service_started
       kafka-init:
         condition: service_completed_successfully
     networks:

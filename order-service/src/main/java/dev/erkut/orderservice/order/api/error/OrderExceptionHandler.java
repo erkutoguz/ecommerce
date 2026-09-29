@@ -5,6 +5,7 @@ import dev.erkut.orderservice.integration.customer.CustomerServiceUnavailableExc
 import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
 import dev.erkut.orderservice.order.api.OrderController;
 import dev.erkut.orderservice.order.api.admin.AdminOrderController;
+import dev.erkut.orderservice.order.api.internal.InternalOrderController;
 import dev.erkut.orderservice.order.domain.exception.InvalidOrderStateException;
 import dev.erkut.orderservice.order.domain.exception.OrderNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -15,7 +16,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = {OrderController.class, AdminOrderController.class})
+@RestControllerAdvice(assignableTypes = {
+        OrderController.class,
+        AdminOrderController.class,
+        InternalOrderController.class
+})
 public class OrderExceptionHandler {
 
     @ExceptionHandler({

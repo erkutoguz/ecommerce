@@ -19,6 +19,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     Page<Order> findAllByCustomerId(UUID customerId, Pageable pageable);
 
+    boolean existsByIdAndCustomerId(UUID id, UUID customerId);
+
     @EntityGraph(attributePaths = "orderItems")
     @Query("select o from Order o")
     Page<Order> findAllWithItems(Pageable pageable);

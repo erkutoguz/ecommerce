@@ -183,6 +183,15 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public boolean belongsToCustomer(UUID orderId, UUID customerId) {
+        if (orderId == null || customerId == null) {
+            return false;
+        }
+
+        return orderRepository.existsByIdAndCustomerId(orderId, customerId);
+    }
+
+    @Transactional(readOnly = true)
     public Page<OrderResponse> getAllOrders(int page, int size) {
         Page<Order> orders = orderRepository.findAllWithItems(orderPageable(page, size));
         return orders.map(OrderMapper::toResponse);

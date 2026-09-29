@@ -209,6 +209,15 @@ class OrderServiceTest {
     }
 
     @Test
+    void belongsToCustomer_usesOwnershipQuery() {
+        when(orderRepository.existsByIdAndCustomerId(ORDER_ID, CUSTOMER_ID)).thenReturn(true);
+
+        assertEquals(true, orderService.belongsToCustomer(ORDER_ID, CUSTOMER_ID));
+
+        verify(orderRepository).existsByIdAndCustomerId(ORDER_ID, CUSTOMER_ID);
+    }
+
+    @Test
     void getAllOrdersUsesUnfilteredPaginatedQueryWithItems() {
         Order first = validOrder(CREATED_AT);
         Order second = validOrder(CREATED_AT.plusSeconds(1));

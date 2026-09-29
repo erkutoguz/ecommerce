@@ -20,6 +20,7 @@ import dev.erkut.paymentservice.provider.payment.exception.PaymentProviderExcept
 import dev.erkut.paymentservice.provider.payment.stripe.StripeWebhookService;
 import com.stripe.net.Webhook;
 import dev.erkut.paymentservice.provider.payment.stripe.inbox.persistence.WebhookEventRepository;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,6 +31,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -40,8 +43,14 @@ import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -66,6 +75,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Testcontainers
 class PaymentServiceApplicationTests {
+
+    private static final TestKeyFiles TEST_KEYS = TestKeyFiles.create();
 
     @Container
     @ServiceConnection
@@ -118,6 +129,18 @@ class PaymentServiceApplicationTests {
         paymentRepository.deleteAll();
         inboxRepository.deleteAll();
         webhookEventRepository.deleteAll();
+    }
+
+    @AfterAll
+    static void deleteTestKeys() throws IOException {
+        TEST_KEYS.delete();
+    }
+
+    @DynamicPropertySource
+    static void configureTestProperties(DynamicPropertyRegistry registry) {
+        registry.add("security.jwt.public-key", () -> TEST_KEYS.publicKey().toUri().toString());
+        registry.add("security.jwt.issuer", () -> "ecommerce-auth");
+        registry.add("security.jwt.audience", () -> "ecommerce-api");
     }
 
     @Test
@@ -603,6 +626,32 @@ class PaymentServiceApplicationTests {
             );
         } catch (java.security.GeneralSecurityException exception) {
             throw new IllegalStateException("Unable to generate Stripe webhook signature", exception);
+        }
+    }
+
+    private record TestKeyFiles(Path directory, Path publicKey) {
+        static TestKeyFiles create() {
+            try {
+                Path directory = Files.createTempDirectory("payment-service-test-keys-");
+                KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+                generator.initialize(2048);
+                KeyPair keyPair = generator.generateKeyPair();
+                Path publicKey = directory.resolve("public.pem");
+                String encoded = Base64.getMimeEncoder(64, new byte[]{'\n'})
+                        .encodeToString(keyPair.getPublic().getEncoded());
+                Files.writeString(publicKey,
+                        "-----BEGIN PUBLIC KEY-----\n"
+                                + encoded
+                                + "\n-----END PUBLIC KEY-----\n");
+                return new TestKeyFiles(directory, publicKey);
+            } catch (Exception exception) {
+                throw new ExceptionInInitializerError(exception);
+            }
+        }
+
+        void delete() throws IOException {
+            Files.deleteIfExists(publicKey);
+            Files.deleteIfExists(directory);
         }
     }
 

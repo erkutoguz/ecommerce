@@ -1,6 +1,7 @@
 package dev.erkut.paymentservice.payment.application;
 
 import dev.erkut.paymentservice.inbox.application.InboxService;
+import dev.erkut.paymentservice.integration.order.OrderOwnershipClient;
 import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
 import dev.erkut.paymentservice.message.event.PaymentCompletedEvent;
@@ -29,22 +30,30 @@ public class PaymentService {
     private final PaymentProvider paymentProvider;
     private final WebhookEventService webhookEventService;
     private final OutboxService outboxService;
+    private final OrderOwnershipClient orderOwnershipClient;
     public PaymentService(
             PaymentRepository paymentRepository,
             InboxService inboxService,
             PaymentProvider paymentProvider,
             WebhookEventService webhookEventService,
-            OutboxService outboxService
+            OutboxService outboxService,
+            OrderOwnershipClient orderOwnershipClient
     ) {
         this.paymentRepository = paymentRepository;
         this.inboxService = inboxService;
         this.paymentProvider = paymentProvider;
         this.webhookEventService = webhookEventService;
         this.outboxService = outboxService;
+        this.orderOwnershipClient = orderOwnershipClient;
     }
 
     @Transactional(readOnly = true)
-    public PaymentResponse getPaymentByOrderId(UUID orderId) {
+    public PaymentResponse getPaymentByOrderId(
+            UUID orderId,
+            String accessToken
+    ) {
+        orderOwnershipClient.getOwnership(orderId, accessToken);
+
         Payment payment = paymentRepository.findById(orderId)
                 .orElseThrow(() -> new PaymentNotFoundException(
                         "Payment not found with order id: " + orderId

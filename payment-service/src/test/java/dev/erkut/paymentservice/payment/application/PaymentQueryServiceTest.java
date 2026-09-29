@@ -1,6 +1,7 @@
 package dev.erkut.paymentservice.payment.application;
 
 import dev.erkut.paymentservice.inbox.application.InboxService;
+import dev.erkut.paymentservice.integration.order.OrderOwnershipClient;
 import dev.erkut.paymentservice.outbox.application.OutboxService;
 import dev.erkut.paymentservice.payment.api.response.PaymentResponse;
 import dev.erkut.paymentservice.payment.domain.Currency;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.when;
 class PaymentQueryServiceTest {
 
     private static final UUID ORDER_ID = UUID.fromString("80000000-0000-0000-0000-000000000001");
+    private static final String ACCESS_TOKEN = "access-token";
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
     private static final String CHECKOUT_URL = "https://checkout.stripe.com/c/test-session";
 
@@ -48,6 +50,9 @@ class PaymentQueryServiceTest {
     @Mock
     private OutboxService outboxService;
 
+    @Mock
+    private OrderOwnershipClient orderOwnershipClient;
+
     @InjectMocks
     private PaymentService paymentService;
 
@@ -56,7 +61,7 @@ class PaymentQueryServiceTest {
         Payment payment = payment();
         when(paymentRepository.findById(ORDER_ID)).thenReturn(Optional.of(payment));
 
-        PaymentResponse response = paymentService.getPaymentByOrderId(ORDER_ID);
+        PaymentResponse response = paymentService.getPaymentByOrderId(ORDER_ID, ACCESS_TOKEN);
 
         assertEquals(ORDER_ID, response.orderId());
         assertEquals(PaymentStatus.AWAITING_CUSTOMER_ACTION, response.status());
@@ -64,6 +69,7 @@ class PaymentQueryServiceTest {
         assertEquals(PaymentStatus.AWAITING_CUSTOMER_ACTION, payment.getStatus());
         assertEquals(CHECKOUT_URL, payment.getCheckoutUrl());
         verify(paymentRepository).findById(ORDER_ID);
+        verify(orderOwnershipClient).getOwnership(ORDER_ID, ACCESS_TOKEN);
         verifyNoInteractions(inboxService, paymentProvider, webhookEventService, outboxService);
     }
 
@@ -73,9 +79,10 @@ class PaymentQueryServiceTest {
 
         assertThrows(
                 dev.erkut.paymentservice.payment.application.exception.PaymentNotFoundException.class,
-                () -> paymentService.getPaymentByOrderId(ORDER_ID)
+                () -> paymentService.getPaymentByOrderId(ORDER_ID, ACCESS_TOKEN)
         );
         verify(paymentRepository).findById(ORDER_ID);
+        verify(orderOwnershipClient).getOwnership(ORDER_ID, ACCESS_TOKEN);
         verifyNoInteractions(inboxService, paymentProvider, webhookEventService, outboxService);
     }
 
@@ -85,7 +92,7 @@ class PaymentQueryServiceTest {
         payment.markCompleted(CREATED_AT.plusSeconds(2), CREATED_AT.plusSeconds(3));
         when(paymentRepository.findById(ORDER_ID)).thenReturn(Optional.of(payment));
 
-        PaymentResponse response = paymentService.getPaymentByOrderId(ORDER_ID);
+        PaymentResponse response = paymentService.getPaymentByOrderId(ORDER_ID, ACCESS_TOKEN);
 
         assertEquals(PaymentStatus.COMPLETED, response.status());
         assertEquals(CHECKOUT_URL, response.checkoutUrl());
