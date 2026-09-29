@@ -175,12 +175,15 @@ services:
       context: ./product-service
     ports:
       - "4003:4003"
+    volumes:
+      - ${HOME}/.ecommerce-keys/public.pem:/run/secrets/auth-keys/public.pem:ro
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://product-db:5432/product
       SPRING_DATASOURCE_USERNAME: product
       SPRING_DATASOURCE_PASSWORD: product-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
+      JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
     depends_on:
       product-db:
         condition: service_healthy
@@ -291,8 +294,6 @@ services:
     depends_on:
       payment-db:
         condition: service_healthy
-      customer-service:
-        condition: service_started
       order-service:
         condition: service_started
       kafka-init:
