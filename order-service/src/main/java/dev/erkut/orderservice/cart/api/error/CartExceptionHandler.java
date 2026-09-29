@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.cart.api.error;
 
 import dev.erkut.orderservice.cart.api.CartController;
+import dev.erkut.orderservice.cart.api.admin.AdminCartController;
 import dev.erkut.orderservice.cart.application.exception.CartNotFoundException;
 import dev.erkut.orderservice.cart.domain.exception.CartItemNotFoundException;
 import dev.erkut.orderservice.integration.customer.CustomerNotFoundException;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = CartController.class)
+@RestControllerAdvice(assignableTypes = {CartController.class, AdminCartController.class})
 public class CartExceptionHandler {
 
     @ExceptionHandler({

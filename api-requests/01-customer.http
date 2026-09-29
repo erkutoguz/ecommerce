@@ -1,6 +1,7 @@
 ### Step 1 - Read the provisioned Customer
-# Requires: Auth.http registration, login, and at least one provisioning poll.
-# Produces: customerId, which the cart flow uses.
+# Optional inspection after Auth.http registration, login, and a successful provisioning poll.
+# This request is not required by Cart or Order requests.
+# Produces: customerId for inspecting the Customer response; Cart and Order identity comes from the JWT.
 
 GET {{baseUrl}}/customers/{{customerId}}
 Authorization: Bearer {{accessToken}}

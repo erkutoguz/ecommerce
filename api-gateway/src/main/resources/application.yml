@@ -12,6 +12,21 @@ spring:
               predicates:
                 - Path=/customers/**
 
+            - id: admin-customer-service
+              uri: ${CUSTOMER_SERVICE_URL:http://localhost:4001}
+              predicates:
+                - Path=/admin/customers/**
+
+            - id: admin-order-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:4000}
+              predicates:
+                - Path=/admin/orders/**
+
+            - id: admin-cart-service
+              uri: ${ORDER_SERVICE_URL:http://localhost:4000}
+              predicates:
+                - Path=/admin/carts/**
+
             - id: order-service
               uri: ${ORDER_SERVICE_URL:http://localhost:4000}
               predicates:

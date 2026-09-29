@@ -1,11 +1,28 @@
 ### Step 9 - Payment expiry flow
 # Expire the Stripe Checkout Session after checkout.
+# Independent scenario: run after a fresh Auth.http bootstrap and repeat Customer provisioning if needed.
+# The public Payment API does not expose the provider session id. After the HTTP setup,
+# use the existing development DB procedure to obtain it, expire the Stripe session,
+# wait for webhook/Kafka processing, then rerun the final status requests below.
 
-GET {{baseUrl}}/carts/current?customerId={{customerId}}
+< {%
+    client.global.clear("paymentExpiryCartId");
+    client.global.clear("paymentExpiryOrderId");
+%}
+
+GET {{baseUrl}}/carts/current
 Authorization: Bearer {{accessToken}}
 
 > {%
-    client.global.set("paymentExpiryCartId", response.body.id);
+    const succeeded = response.status === 200 && response.body.id != null;
+    client.test("payment-expiry Cart is available", function () {
+        client.assert(succeeded, "Expected a current Cart with an id");
+    });
+    if (succeeded) {
+        client.global.set("paymentExpiryCartId", response.body.id);
+    } else {
+        client.global.clear("paymentExpiryCartId");
+    }
 %}
 
 ### Add the payment-expiry test product
@@ -28,7 +45,15 @@ Authorization: Bearer {{accessToken}}
 }
 
 > {%
-    client.global.set("paymentExpiryOrderId", response.body.orderId);
+    const succeeded = response.status === 201 && response.body.orderId != null;
+    client.test("payment-expiry checkout creates an order", function () {
+        client.assert(succeeded, "Expected checkout to return an order id");
+    });
+    if (succeeded) {
+        client.global.set("paymentExpiryOrderId", response.body.orderId);
+    } else {
+        client.global.clear("paymentExpiryOrderId");
+    }
 %}
 
 ### Wait for asynchronous payment creation and read the persisted checkout URL
@@ -36,18 +61,36 @@ GET {{baseUrl}}/payments/order/{{paymentExpiryOrderId}}
 Authorization: Bearer {{accessToken}}
 
 > {%
+    const paymentReady = response.status === 200
+        && response.body.status === "AWAITING_CUSTOMER_ACTION"
+        && response.body.checkoutUrl != null;
     client.test("payment checkpoint is available", function () {
-        client.assert(response.status === 200, "Expected 200 after payment creation");
-        client.assert(response.body.status === "AWAITING_CUSTOMER_ACTION", "Payment must await customer action");
-        client.assert(response.body.checkoutUrl != null, "Checkout URL must be present");
+        client.assert(paymentReady, "Payment must await customer action with a checkout URL");
     });
-    client.global.set("paymentExpiryCheckoutUrl", response.body.checkoutUrl);
+    if (!paymentReady) {
+        client.log("Payment is not ready yet; run this request again before expiring the Stripe session.");
+    }
 %}
 
-### External: use the documented provider/DB path to obtain the provider session id, expire it, then wait for webhook/Kafka
+### External: obtain the provider session id through the documented DB procedure, expire it through Stripe, then wait for webhook/Kafka.
 GET {{baseUrl}}/orders/{{paymentExpiryOrderId}}
 Authorization: Bearer {{accessToken}}
+
+> {%
+    client.test("payment-expired order is rejected", function () {
+        client.assert(response.status === 200, "Expected the expired order to be readable");
+        client.assert(response.body.status === "REJECTED", "Order must be REJECTED");
+        client.assert(response.body.rejectionReason === "PAYMENT_EXPIRED", "Reason must be PAYMENT_EXPIRED");
+    });
+%}
 
 ### Check the reopened cart
 GET {{baseUrl}}/carts/{{paymentExpiryCartId}}
 Authorization: Bearer {{accessToken}}
+
+> {%
+    client.test("Cart is active after payment expiry", function () {
+        client.assert(response.status === 200, "Expected the Cart to be readable");
+        client.assert(response.body.status === "ACTIVE", "Cart must be ACTIVE");
+    });
+%}

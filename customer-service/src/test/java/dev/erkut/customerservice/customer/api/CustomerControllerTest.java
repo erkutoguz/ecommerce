@@ -9,6 +9,8 @@ import dev.erkut.customerservice.customer.api.error.GlobalExceptionHandler;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
 import dev.erkut.customerservice.customer.domain.CustomerStatus;
 import dev.erkut.customerservice.customer.application.CustomerService;
+import dev.erkut.customerservice.security.CurrentUser;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -40,6 +42,7 @@ class CustomerControllerTest {
 
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final UUID ADDRESS_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static final UUID AUTH_USER_ID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static final Instant CREATED_AT = Instant.parse("2026-01-01T10:00:00Z");
 
     @Autowired
@@ -48,10 +51,18 @@ class CustomerControllerTest {
     @MockitoBean
     private CustomerService customerService;
 
+    @MockitoBean
+    private CurrentUser currentUser;
+
+    @BeforeEach
+    void setUpCurrentUser() {
+        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
+    }
+
     @Test
     void getCustomerById_successReturnsOkAndMissingReturnsNotFound() throws Exception {
-        when(customerService.getCustomerById(CUSTOMER_ID)).thenReturn(customerResponse(CustomerStatus.ACTIVE));
-        when(customerService.getCustomerById(eq(ADDRESS_ID)))
+        when(customerService.getCustomerById(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(customerResponse(CustomerStatus.ACTIVE));
+        when(customerService.getCustomerById(eq(ADDRESS_ID), eq(AUTH_USER_ID)))
                 .thenThrow(new CustomerNotFoundException("customer missing"));
 
         mockMvc.perform(get("/customers/{customerId}", CUSTOMER_ID))
@@ -64,14 +75,14 @@ class CustomerControllerTest {
 
     @Test
     void getCustomers_validPaginationReturnsOk() throws Exception {
-        when(customerService.getCustomers(1, 2))
+        when(customerService.getCustomers(1, 2, AUTH_USER_ID))
                 .thenReturn(new PageImpl<>(List.of(customerResponse(CustomerStatus.ACTIVE))));
 
         mockMvc.perform(get("/customers").param("page", "1").param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1));
 
-        verify(customerService).getCustomers(1, 2);
+        verify(customerService).getCustomers(1, 2, AUTH_USER_ID);
     }
 
     @Test
@@ -85,12 +96,12 @@ class CustomerControllerTest {
                     .andExpect(jsonPath("$.error").value("Request validation failed"));
         }
 
-        verify(customerService, never()).getCustomers(any(Integer.class), any(Integer.class));
+        verify(customerService, never()).getCustomers(any(Integer.class), any(Integer.class), any(UUID.class));
     }
 
     @Test
     void deactivateCustomer_successReturnsOk() throws Exception {
-        when(customerService.deactivateCustomer(CUSTOMER_ID)).thenReturn(customerResponse(CustomerStatus.INACTIVE));
+        when(customerService.deactivateCustomer(CUSTOMER_ID, AUTH_USER_ID)).thenReturn(customerResponse(CustomerStatus.INACTIVE));
 
         mockMvc.perform(post("/customers/{customerId}/deactivate", CUSTOMER_ID))
                 .andExpect(status().isOk())
@@ -99,9 +110,9 @@ class CustomerControllerTest {
 
     @Test
     void deactivateCustomer_missingOrInvalidStateReturnsExpectedErrors() throws Exception {
-        when(customerService.deactivateCustomer(CUSTOMER_ID))
+        when(customerService.deactivateCustomer(CUSTOMER_ID, AUTH_USER_ID))
                 .thenThrow(new CustomerNotFoundException("customer missing"));
-        when(customerService.deactivateCustomer(ADDRESS_ID))
+        when(customerService.deactivateCustomer(ADDRESS_ID, AUTH_USER_ID))
                 .thenThrow(new InvalidCustomerStateException("inactive customer"));
 
         mockMvc.perform(post("/customers/{customerId}/deactivate", CUSTOMER_ID))
@@ -113,7 +124,7 @@ class CustomerControllerTest {
 
     @Test
     void addAddress_validRequestReturnsCreatedAddress() throws Exception {
-        when(customerService.addCustomerAddress(eq(CUSTOMER_ID), any(CustomerAddressCreateRequest.class)))
+        when(customerService.addCustomerAddress(eq(CUSTOMER_ID), eq(AUTH_USER_ID), any(CustomerAddressCreateRequest.class)))
                 .thenReturn(new CustomerAddressResponse(ADDRESS_ID, "1 Main Street", "London", "United Kingdom"));
 
         mockMvc.perform(post("/customers/{customerId}/addresses", CUSTOMER_ID)
@@ -134,14 +145,14 @@ class CustomerControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Request validation failed"));
 
-        verify(customerService, never()).addCustomerAddress(any(), any());
+        verify(customerService, never()).addCustomerAddress(any(), any(), any());
     }
 
     @Test
     void addAddress_missingCustomerOrInactiveCustomerReturnsExpectedErrors() throws Exception {
-        when(customerService.addCustomerAddress(eq(CUSTOMER_ID), any(CustomerAddressCreateRequest.class)))
+        when(customerService.addCustomerAddress(eq(CUSTOMER_ID), eq(AUTH_USER_ID), any(CustomerAddressCreateRequest.class)))
                 .thenThrow(new CustomerNotFoundException("customer missing"));
-        when(customerService.addCustomerAddress(eq(ADDRESS_ID), any(CustomerAddressCreateRequest.class)))
+        when(customerService.addCustomerAddress(eq(ADDRESS_ID), eq(AUTH_USER_ID), any(CustomerAddressCreateRequest.class)))
                 .thenThrow(new InvalidCustomerStateException("inactive customer"));
 
         String body = "{\"fullAddress\":\"1 Main Street\",\"city\":\"London\",\"country\":\"United Kingdom\"}";
@@ -158,7 +169,7 @@ class CustomerControllerTest {
         mockMvc.perform(delete("/customers/{customerId}/addresses/{addressId}", CUSTOMER_ID, ADDRESS_ID))
                 .andExpect(status().isNoContent());
 
-        verify(customerService).removeCustomerAddress(CUSTOMER_ID, ADDRESS_ID);
+        verify(customerService).removeCustomerAddress(CUSTOMER_ID, AUTH_USER_ID, ADDRESS_ID);
     }
 
     @Test
@@ -166,11 +177,11 @@ class CustomerControllerTest {
         UUID missingCustomerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
         UUID missingAddressId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
         doThrow(new CustomerNotFoundException("customer missing"))
-                .when(customerService).removeCustomerAddress(missingCustomerId, ADDRESS_ID);
+                .when(customerService).removeCustomerAddress(missingCustomerId, AUTH_USER_ID, ADDRESS_ID);
         doThrow(new AddressNotFoundException("address missing"))
-                .when(customerService).removeCustomerAddress(CUSTOMER_ID, missingAddressId);
+                .when(customerService).removeCustomerAddress(CUSTOMER_ID, AUTH_USER_ID, missingAddressId);
         doThrow(new InvalidCustomerStateException("inactive customer"))
-                .when(customerService).removeCustomerAddress(ADDRESS_ID, CUSTOMER_ID);
+                .when(customerService).removeCustomerAddress(ADDRESS_ID, AUTH_USER_ID, CUSTOMER_ID);
 
         mockMvc.perform(delete("/customers/{customerId}/addresses/{addressId}", missingCustomerId, ADDRESS_ID))
                 .andExpect(status().isNotFound());

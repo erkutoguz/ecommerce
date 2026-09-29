@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -24,8 +25,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class CustomerClientTest {
 
-    private static final String CUSTOMER_SERVICE_URL = "http://customer-service.test/customers";
+    private static final String CUSTOMER_SERVICE_BASE_URL = "http://customer-service.test";
+    private static final UUID AUTH_USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static final String ACCESS_TOKEN = "access-token";
 
     private MockRestServiceServer server;
     private CustomerClient customerClient;
@@ -34,7 +37,7 @@ class CustomerClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        customerClient = new CustomerClient(builder, CUSTOMER_SERVICE_URL);
+        customerClient = new CustomerClient(builder, CUSTOMER_SERVICE_BASE_URL);
     }
 
     @AfterEach
@@ -44,13 +47,16 @@ class CustomerClientTest {
 
     @Test
     void successfulResponseIsDeserializedIntoCustomerLookupResponse() {
-        server.expect(requestTo(customerUrl()))
+        server.expect(requestTo(internalCustomerUrl()))
                 .andExpect(method(HttpMethod.GET))
+                .andExpect(request -> assertEquals(
+                        "Bearer " + ACCESS_TOKEN,
+                        request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION)))
                 .andRespond(withSuccess(
                         "{\"customerId\":\"" + CUSTOMER_ID + "\",\"status\":\"ACTIVE\"}",
                         MediaType.APPLICATION_JSON));
 
-        CustomerLookupResponse response = customerClient.getCustomerDetail(CUSTOMER_ID);
+        CustomerLookupResponse response = customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN);
 
         assertEquals(CUSTOMER_ID, response.customerId());
         assertEquals(CustomerStatus.ACTIVE, response.status());
@@ -58,44 +64,56 @@ class CustomerClientTest {
 
     @Test
     void notFoundResponseThrowsCustomerNotFoundException() {
-        server.expect(requestTo(customerUrl()))
+        server.expect(requestTo(internalCustomerUrl()))
                 .andRespond(withRawStatus(404));
 
         CustomerNotFoundException exception = assertThrows(
                 CustomerNotFoundException.class,
-                () -> customerClient.getCustomerDetail(CUSTOMER_ID));
+                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
 
-        assertEquals("Customer not found with id: " + CUSTOMER_ID, exception.getMessage());
+        assertEquals("Customer not found for auth user: " + AUTH_USER_ID, exception.getMessage());
     }
 
     @ParameterizedTest
     @ValueSource(ints = {500, 502, 503})
     void anyServerErrorResponseThrowsCustomerServiceUnavailableException(int status) {
-        server.expect(requestTo(customerUrl()))
+        server.expect(requestTo(internalCustomerUrl()))
                 .andRespond(withRawStatus(status));
 
         CustomerServiceUnavailableException exception = assertThrows(
                 CustomerServiceUnavailableException.class,
-                () -> customerClient.getCustomerDetail(CUSTOMER_ID));
+                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
 
         assertEquals("Customer service unavailable", exception.getMessage());
     }
 
     @Test
     void lowLevelIoFailureThrowsCustomerServiceUnavailableException() {
-        server.expect(requestTo(customerUrl()))
+        server.expect(requestTo(internalCustomerUrl()))
                 .andRespond(withException(new IOException("connection failed")));
 
         CustomerServiceUnavailableException exception = assertThrows(
                 CustomerServiceUnavailableException.class,
-                () -> customerClient.getCustomerDetail(CUSTOMER_ID));
+                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
 
         assertEquals("Customer service unavailable", exception.getMessage());
         assertInstanceOf(ResourceAccessException.class, exception.getCause());
         assertInstanceOf(IOException.class, exception.getCause().getCause());
     }
 
-    private static String customerUrl() {
-        return CUSTOMER_SERVICE_URL + "/" + CUSTOMER_ID;
+    @Test
+    void unexpectedClientErrorThrowsCustomerServiceUnavailableException() {
+        server.expect(requestTo(internalCustomerUrl()))
+                .andRespond(withRawStatus(400));
+
+        CustomerServiceUnavailableException exception = assertThrows(
+                CustomerServiceUnavailableException.class,
+                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
+
+        assertEquals("Customer service returned unexpected status: 400", exception.getMessage());
+    }
+
+    private static String internalCustomerUrl() {
+        return CUSTOMER_SERVICE_BASE_URL + "/internal/by-auth-user/" + AUTH_USER_ID;
     }
 }

@@ -2,6 +2,8 @@
 # Requires: cartId from step 3 and Product A in the cart.
 # Produces: orderId from the real OrderResponse.orderId field.
 
+< {% client.global.clear("orderId"); %}
+
 POST {{baseUrl}}/carts/{{cartId}}/checkout
 Content-Type: application/json
 Authorization: Bearer {{accessToken}}
@@ -15,5 +17,9 @@ Authorization: Bearer {{accessToken}}
         client.assert(response.status === 201, "Expected 201 from checkout");
         client.assert(response.body.orderId != null, "Order id must be present");
     });
-    client.global.set("orderId", response.body.orderId);
+    if (response.status === 201 && response.body.orderId != null) {
+        client.global.set("orderId", response.body.orderId);
+    } else {
+        client.global.clear("orderId");
+    }
 %}

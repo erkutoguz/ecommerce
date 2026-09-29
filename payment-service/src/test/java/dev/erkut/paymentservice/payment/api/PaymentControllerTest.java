@@ -5,6 +5,7 @@ import dev.erkut.paymentservice.payment.api.response.PaymentResponse;
 import dev.erkut.paymentservice.payment.application.PaymentService;
 import dev.erkut.paymentservice.payment.application.exception.PaymentNotFoundException;
 import dev.erkut.paymentservice.payment.domain.PaymentStatus;
+import dev.erkut.paymentservice.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -33,9 +34,13 @@ class PaymentControllerTest {
     @MockitoBean
     private PaymentService paymentService;
 
+    @MockitoBean
+    private CurrentUser currentUser;
+
     @Test
     void getPaymentByOrderId_existingPaymentReturnsPublicCheckpoint() throws Exception {
-        when(paymentService.getPaymentByOrderId(ORDER_ID))
+        when(currentUser.accessToken()).thenReturn("access-token");
+        when(paymentService.getPaymentByOrderId(ORDER_ID, "access-token"))
                 .thenReturn(new PaymentResponse(ORDER_ID, PaymentStatus.AWAITING_CUSTOMER_ACTION, CHECKOUT_URL));
 
         mockMvc.perform(get("/payments/order/{orderId}", ORDER_ID))
@@ -45,12 +50,13 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.checkoutUrl").value(CHECKOUT_URL))
                 .andExpect(jsonPath("$.providerPaymentId").doesNotExist());
 
-        verify(paymentService).getPaymentByOrderId(ORDER_ID);
+        verify(paymentService).getPaymentByOrderId(ORDER_ID, "access-token");
     }
 
     @Test
     void getPaymentByOrderId_missingPaymentReturnsNotFound() throws Exception {
-        when(paymentService.getPaymentByOrderId(ORDER_ID))
+        when(currentUser.accessToken()).thenReturn("access-token");
+        when(paymentService.getPaymentByOrderId(ORDER_ID, "access-token"))
                 .thenThrow(new PaymentNotFoundException("Payment not found with order id: " + ORDER_ID));
 
         mockMvc.perform(get("/payments/order/{orderId}", ORDER_ID))

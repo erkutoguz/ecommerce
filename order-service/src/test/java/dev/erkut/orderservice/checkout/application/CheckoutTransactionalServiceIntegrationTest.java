@@ -2,6 +2,7 @@ package dev.erkut.orderservice.checkout.application;
 
 import dev.erkut.orderservice.cart.domain.Cart;
 import dev.erkut.orderservice.cart.domain.CartStatus;
+import dev.erkut.orderservice.cart.application.exception.CartNotFoundException;
 import dev.erkut.orderservice.cart.persistence.CartRepository;
 import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.Order;
@@ -29,6 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.JsonNode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
 @Testcontainers
@@ -41,6 +43,9 @@ class CheckoutTransactionalServiceIntegrationTest {
             new PostgreSQLContainer<>("postgres:16-alpine");
 
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa16");
+    private static final UUID FOREIGN_TEST_CART_CUSTOMER_ID =
+            UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa17");
+    private static final UUID FOREIGN_CUSTOMER_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb16");
     private static final UUID PRODUCT_ID = UUID.fromString("90000000-0000-0000-0000-000000000016");
     private static final Instant CHECKOUT_AT = Instant.parse("2026-01-01T10:05:00Z");
 
@@ -62,10 +67,11 @@ class CheckoutTransactionalServiceIntegrationTest {
     @Test
     void checkout_shouldPersistCartOrderAndOutboxAtomically() {
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        UUID cartId = seedCart(transactionTemplate);
+        UUID cartId = seedCart(transactionTemplate, CUSTOMER_ID);
 
         Order createdOrder = checkoutTransactionalService.checkout(
                 cartId,
+                CUSTOMER_ID,
                 0,
                 Currency.TRY,
                 List.of(new OrderLineSnapshot(PRODUCT_ID, "Product 16", new BigDecimal("100.00"), 2)),
@@ -92,9 +98,39 @@ class CheckoutTransactionalServiceIntegrationTest {
         assertEquals(2, payload.get("items").get(0).get("quantity").asInt());
     }
 
-    private UUID seedCart(TransactionTemplate transactionTemplate) {
+    @Test
+    void checkout_foreignCustomer_shouldRejectBeforeCreatingOrder() {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        UUID cartId = seedCart(transactionTemplate, FOREIGN_TEST_CART_CUSTOMER_ID);
+
+        assertThrows(
+                CartNotFoundException.class,
+                () -> checkoutTransactionalService.checkout(
+                        cartId,
+                        FOREIGN_CUSTOMER_ID,
+                        0,
+                        Currency.TRY,
+                        List.of(new OrderLineSnapshot(
+                                PRODUCT_ID,
+                                "Product 16",
+                                new BigDecimal("100.00"),
+                                2
+                        )),
+                        CHECKOUT_AT
+                )
+        );
+
+        long ordersForCart = transactionTemplate.execute(status ->
+                orderRepository.findAll().stream()
+                        .filter(order -> order.getSourceCartId().equals(cartId))
+                        .count()
+        );
+        assertEquals(0, ordersForCart);
+    }
+
+    private UUID seedCart(TransactionTemplate transactionTemplate, UUID customerId) {
         return transactionTemplate.execute(status -> {
-            Cart cart = Cart.create(CUSTOMER_ID, CHECKOUT_AT.minusSeconds(60));
+            Cart cart = Cart.create(customerId, CHECKOUT_AT.minusSeconds(60));
             cart.addCartItem(PRODUCT_ID, 2, CHECKOUT_AT.minusSeconds(30));
             return cartRepository.save(cart).getId();
         });

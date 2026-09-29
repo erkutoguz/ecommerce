@@ -4,6 +4,7 @@ import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateReque
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
 import dev.erkut.customerservice.customer.api.response.CustomerResponse;
 import dev.erkut.customerservice.customer.application.CustomerService;
+import dev.erkut.customerservice.security.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -18,14 +19,16 @@ import java.util.UUID;
 @RequestMapping("/customers")
 public class CustomerController {
     private final CustomerService customerService;
+    private final CurrentUser currentUser;
 
-    public CustomerController(CustomerService customerService) {
+    public CustomerController(CustomerService customerService, CurrentUser currentUser) {
         this.customerService = customerService;
+        this.currentUser = currentUser;
     }
 
     @GetMapping("/{customerId}")
     public ResponseEntity<CustomerResponse> getCustomerById(@PathVariable("customerId") UUID customerId) {
-        CustomerResponse response = customerService.getCustomerById(customerId);
+        CustomerResponse response = customerService.getCustomerById(customerId, currentUser.authUserId());
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
@@ -34,13 +37,13 @@ public class CustomerController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size
     ) {
-        Page<CustomerResponse> response = customerService.getCustomers(page, size);
+        Page<CustomerResponse> response = customerService.getCustomers(page, size, currentUser.authUserId());
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
     @PostMapping("/{customerId}/deactivate")
     public ResponseEntity<CustomerResponse> deactivateCustomer(@PathVariable("customerId") UUID customerId) {
-        CustomerResponse response = customerService.deactivateCustomer(customerId);
+        CustomerResponse response = customerService.deactivateCustomer(customerId, currentUser.authUserId());
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
@@ -49,7 +52,11 @@ public class CustomerController {
             @PathVariable("customerId") UUID customerId,
             @Valid @RequestBody CustomerAddressCreateRequest req
     ) {
-      CustomerAddressResponse response = customerService.addCustomerAddress(customerId, req);
+      CustomerAddressResponse response = customerService.addCustomerAddress(
+              customerId,
+              currentUser.authUserId(),
+              req
+      );
       return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -58,7 +65,7 @@ public class CustomerController {
             @PathVariable("customerId") UUID customerId,
             @PathVariable("addressId") UUID addressId
     ) {
-        customerService.removeCustomerAddress(customerId, addressId);
+        customerService.removeCustomerAddress(customerId, currentUser.authUserId(), addressId);
         return ResponseEntity.noContent().build();
     }
 }

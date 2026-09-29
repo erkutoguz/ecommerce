@@ -69,6 +69,7 @@ class CheckoutTransactionalRollbackIntegrationTest {
                 RuntimeException.class,
                 () -> checkoutTransactionalService.checkout(
                         cartId,
+                        CUSTOMER_ID,
                         0,
                         Currency.TRY,
                         List.of(new OrderLineSnapshot(PRODUCT_ID, "Product 17", new BigDecimal("100.00"), 1)),

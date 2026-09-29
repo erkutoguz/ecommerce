@@ -17,15 +17,15 @@ wait_for_gateway
 bootstrap_e2e_customer
 verify_seed_data
 assert_clean_stock
-get_clean_cart "$E2E_CUSTOMER_ID"
+get_clean_cart
 pass "Cart ready"
-add_product_to_cart "$CART_ID" 2
+add_product_to_cart "$CART_ID" 1
 start_checkout "$CART_ID"
 wait_for_order_created
 wait_for_payment_awaiting
 
 wait_for_reservation_status RESERVED
-wait_for_stock '100|2|true'
+wait_for_stock '100|1|true'
 wait_for_provider_payment_id
 expire_stripe_session "$PROVIDER_PAYMENT_ID"
 

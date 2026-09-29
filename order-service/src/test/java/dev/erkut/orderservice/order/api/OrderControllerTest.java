@@ -1,6 +1,7 @@
 package dev.erkut.orderservice.order.api;
 
 import dev.erkut.orderservice.api.error.GlobalExceptionHandler;
+import dev.erkut.orderservice.integration.customer.CurrentCustomerResolver;
 import dev.erkut.orderservice.order.api.error.OrderExceptionHandler;
 import dev.erkut.orderservice.order.api.response.OrderItemResponse;
 import dev.erkut.orderservice.order.api.response.OrderResponse;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -44,9 +46,17 @@ class OrderControllerTest {
     @MockitoBean
     private OrderService orderService;
 
+    @MockitoBean
+    private CurrentCustomerResolver currentCustomerResolver;
+
+    @BeforeEach
+    void setUpCurrentCustomer() {
+        when(currentCustomerResolver.customerId()).thenReturn(CUSTOMER_ID);
+    }
+
     @Test
     void getOrders_validPageAndSize_shouldReturnSuccessStatus() throws Exception {
-        when(orderService.getOrders(null, 1, 5)).thenReturn(pageOfOrders());
+        when(orderService.getOrders(CUSTOMER_ID, 1, 5)).thenReturn(pageOfOrders());
 
         mockMvc.perform(get("/orders")
                         .param("page", "1")
@@ -55,11 +65,11 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].sourceCartId").value(SOURCE_CART_ID.toString()))
                 .andExpect(jsonPath("$.content[0].status").value("PENDING_STOCK"));
-        verify(orderService).getOrders(null, 1, 5);
+        verify(orderService).getOrders(CUSTOMER_ID, 1, 5);
     }
 
     @Test
-    void getOrders_withCustomerId_shouldReturnSuccessStatus() throws Exception {
+    void getOrders_ignoresClientCustomerId_shouldUseResolvedCustomer() throws Exception {
         when(orderService.getOrders(CUSTOMER_ID, 0, 10)).thenReturn(pageOfOrders());
 
         mockMvc.perform(get("/orders")
@@ -78,7 +88,7 @@ class OrderControllerTest {
 
     @Test
     void getOrderById_existingOrder_shouldReturnSuccessStatus() throws Exception {
-        when(orderService.getOrderById(ORDER_ID)).thenReturn(orderResponse());
+        when(orderService.getOrderById(ORDER_ID, CUSTOMER_ID)).thenReturn(orderResponse());
 
         mockMvc.perform(get("/orders/{orderId}", ORDER_ID))
                 .andExpect(status().isOk())
@@ -87,12 +97,12 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.status").value("PENDING_STOCK"))
                 .andExpect(jsonPath("$.items[0].productId").value(PRODUCT_ID.toString()))
                 .andExpect(jsonPath("$.totalAmount").value(200.00));
-        verify(orderService).getOrderById(ORDER_ID);
+        verify(orderService).getOrderById(ORDER_ID, CUSTOMER_ID);
     }
 
     @Test
     void getOrderById_unknownOrder_shouldReturnNotFound() throws Exception {
-        when(orderService.getOrderById(ORDER_ID))
+        when(orderService.getOrderById(ORDER_ID, CUSTOMER_ID))
                 .thenThrow(new OrderNotFoundException("Order not found with id: " + ORDER_ID));
 
         mockMvc.perform(get("/orders/{orderId}", ORDER_ID))

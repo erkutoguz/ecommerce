@@ -1,5 +1,6 @@
 package dev.erkut.customerservice.customer.application;
 
+import dev.erkut.customerservice.customer.api.internal.CustomerLookupResponse;
 import dev.erkut.customerservice.customer.api.request.CustomerAddressCreateRequest;
 import dev.erkut.customerservice.customer.api.response.CustomerAddressResponse;
 import dev.erkut.customerservice.customer.api.response.CustomerResponse;
@@ -58,35 +59,66 @@ public class CustomerService {
     }
 
     @Transactional(readOnly = true)
-    public CustomerResponse getCustomerById(UUID customerId) {
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+    public CustomerResponse getCustomerById(UUID customerId, UUID authUserId) {
+        Customer customer = findOwnedCustomer(customerId, authUserId);
         return CustomerMapper.toResponse(customer);
     }
 
     @Transactional(readOnly = true)
-    public Page<CustomerResponse> getCustomers(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending()
-                .and(Sort.by(Sort.Direction.DESC, "id")));
+    public CustomerResponse getCustomerByIdForAdmin(UUID customerId) {
+        return CustomerMapper.toResponse(findCustomer(customerId));
+    }
 
-        Page<Customer> customers = customerRepository.findAll(pageable);
+    @Transactional(readOnly = true)
+    public CustomerLookupResponse getByAuthUserId(UUID authUserId) {
+        Customer customer = customerRepository.findByAuthUserId(authUserId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with auth id: " + authUserId));
+
+        return new CustomerLookupResponse(
+                customer.getId(),
+                customer.getStatus()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerResponse> getCustomers(int page, int size, UUID authUserId) {
+        Pageable pageable = customerPageable(page, size);
+
+        Page<Customer> customers = customerRepository.findByAuthUserId(authUserId, pageable);
+        return customers.map(CustomerMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CustomerResponse> getCustomersForAdmin(int page, int size) {
+        Page<Customer> customers = customerRepository.findAll(customerPageable(page, size));
         return customers.map(CustomerMapper::toResponse);
     }
 
     @Transactional
-    public CustomerResponse deactivateCustomer(UUID customerId) {
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+    public CustomerResponse deactivateCustomer(UUID customerId, UUID authUserId) {
+        Customer customer = findOwnedCustomer(customerId, authUserId);
+        return deactivateCustomer(customer);
+    }
+
+    @Transactional
+    public CustomerResponse deactivateCustomerForAdmin(UUID customerId) {
+        return deactivateCustomer(findCustomer(customerId));
+    }
+
+    private CustomerResponse deactivateCustomer(Customer customer) {
         Instant now = Instant.now();
         customer.deactivateCustomer(now);
         return CustomerMapper.toResponse(customer);
     }
 
     @Transactional
-    public CustomerAddressResponse addCustomerAddress(UUID customerId, CustomerAddressCreateRequest req) {
+    public CustomerAddressResponse addCustomerAddress(
+            UUID customerId,
+            UUID authUserId,
+            CustomerAddressCreateRequest req
+    ) {
         Instant now = Instant.now();
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+        Customer customer = findOwnedCustomer(customerId, authUserId);
 
         CustomerAddress address = customer.addAddress(req.fullAddress(), req.city(), req.country(), now);
         customerRepository.flush();
@@ -94,10 +126,28 @@ public class CustomerService {
     }
 
     @Transactional
-    public void removeCustomerAddress(UUID customerId, UUID addressId) {
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with id: " + customerId));
+    public void removeCustomerAddress(UUID customerId, UUID authUserId, UUID addressId) {
+        Customer customer = findOwnedCustomer(customerId, authUserId);
         customer.removeAddress(addressId, Instant.now());
+    }
+
+    private Customer findOwnedCustomer(UUID customerId, UUID authUserId) {
+        if (authUserId == null) {
+            throw new IllegalArgumentException("Auth user id cannot be null");
+        }
+
+        return customerRepository.findByIdAndAuthUserId(customerId, authUserId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
+    }
+
+    private Customer findCustomer(UUID customerId) {
+        return customerRepository.findById(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
+    }
+
+    private Pageable customerPageable(int page, int size) {
+        return PageRequest.of(page, size, Sort.by("createdAt").descending()
+                .and(Sort.by(Sort.Direction.DESC, "id")));
     }
 
     private void validateCustomerCommand(MessageEnvelope envelope, Object event) {

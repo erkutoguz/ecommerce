@@ -52,6 +52,9 @@ public class SecurityConfig {
                                 "/products/**"
                         ).hasRole("ADMIN")
                         .requestMatchers(
+                                "/admin/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
                                 "/customers/**",
                                 "/orders/**",
                                 "/carts/**",

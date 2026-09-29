@@ -4,10 +4,6 @@ import dev.erkut.orderservice.cart.application.exception.CartNotFoundException;
 import dev.erkut.orderservice.cart.domain.Cart;
 import dev.erkut.orderservice.cart.domain.CartStatus;
 import dev.erkut.orderservice.cart.persistence.CartRepository;
-import dev.erkut.orderservice.integration.customer.CustomerClient;
-import dev.erkut.orderservice.integration.customer.CustomerLookupResponse;
-import dev.erkut.orderservice.integration.customer.CustomerStatus;
-import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
 import dev.erkut.orderservice.integration.product.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,23 +16,20 @@ public class CartService {
 
     private final CartRepository cartRepository;
     private final CartTransactionalService transactionalService;
-    private final CustomerClient customerClient;
     private final ProductClient productClient;
 
     public CartService(
             CartRepository cartRepository,
             CartTransactionalService transactionalService,
-            CustomerClient customerClient, ProductClient productClient
+            ProductClient productClient
     ) {
         this.cartRepository = cartRepository;
         this.transactionalService = transactionalService;
-        this.customerClient = customerClient;
         this.productClient = productClient;
     }
 
 
     public Cart createCart(UUID customerId) {
-        validateCustomer(customerId);
         return transactionalService.create(customerId);
     }
 
@@ -54,17 +47,20 @@ public class CartService {
     }
 
     @Transactional(readOnly = true)
-    public Cart getCartById(UUID cartId) {
-        if(cartId == null) {
-            throw new IllegalArgumentException("Cart id cannot be null");
-        }
+    public Cart getCartById(UUID cartId, UUID customerId) {
+        return cartRepository.findWithCartItemsByIdAndCustomerId(cartId, customerId)
+                .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
+    }
 
+    @Transactional(readOnly = true)
+    public Cart getCartByIdForAdmin(UUID cartId) {
         return cartRepository.findWithCartItemsById(cartId)
                 .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
     }
 
     public Cart addCartItem(
             UUID cartId,
+            UUID customerId,
             UUID productId,
             int quantity
     ) {
@@ -79,32 +75,43 @@ public class CartService {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
+        if(customerId == null) {
+            throw new IllegalArgumentException("Customer id cannot be null");
+        }
 
         validateProducts(List.of(productId));
 
-        return transactionalService.addCartItem(cartId, productId, quantity, Instant.now());
+        return transactionalService.addCartItem(cartId, customerId, productId, quantity, Instant.now());
     }
 
     @Transactional
-    public void removeCartItem(UUID cartId, UUID productId) {
+    public void removeCartItem(UUID cartId, UUID customerId, UUID productId) {
         if (cartId == null) {
             throw new IllegalArgumentException("Cart id cannot be null");
+        }
+
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer id cannot be null");
         }
 
         if (productId == null) {
             throw new IllegalArgumentException("Product id cannot be null");
         }
 
-        Cart cart = cartRepository.findWithCartItemsById(cartId)
-                .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
+        Cart cart = cartRepository.findWithCartItemsByIdAndCustomerId(cartId, customerId)
+                .orElseThrow(() ->new CartNotFoundException("Cart not found with id: " + cartId));
 
         cart.removeCartItem(productId, Instant.now());
     }
 
     @Transactional
-    public Cart changeCartItemQuantity(UUID cartId, UUID productId, int quantity) {
+    public Cart changeCartItemQuantity(UUID cartId, UUID customerId, UUID productId, int quantity) {
         if (cartId == null) {
             throw new IllegalArgumentException("Cart id cannot be null");
+        }
+
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer id cannot be null");
         }
 
         if (productId == null) {
@@ -115,22 +122,11 @@ public class CartService {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
 
-        Cart cart = cartRepository.findWithCartItemsById(cartId)
-                .orElseThrow(() -> new CartNotFoundException("Cart not found with id: " + cartId));
+        Cart cart = cartRepository.findWithCartItemsByIdAndCustomerId(cartId, customerId)
+                .orElseThrow(() ->new CartNotFoundException("Cart not found with id: " + cartId));
 
         cart.changeCartItemQuantity(productId, quantity, Instant.now());
         return cart;
-    }
-
-    private void validateCustomer(UUID customerId) {
-        if(customerId == null) {
-            throw new IllegalArgumentException("Customer id cannot be null");
-        }
-
-        CustomerLookupResponse customer = customerClient.getCustomerDetail(customerId);
-        if(customer.status() != CustomerStatus.ACTIVE) {
-            throw new InvalidCustomerStateException("Customer is not active");
-        }
     }
 
     void validateProducts(List<UUID> productIds) {

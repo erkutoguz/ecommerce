@@ -17,7 +17,7 @@ wait_for_gateway
 bootstrap_e2e_customer
 verify_seed_data
 assert_clean_stock
-get_clean_cart "$E2E_CUSTOMER_ID"
+get_clean_cart
 pass "Cart ready"
 add_product_to_cart "$CART_ID" 2
 

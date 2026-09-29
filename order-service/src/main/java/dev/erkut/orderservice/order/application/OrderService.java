@@ -171,21 +171,53 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Page<OrderResponse> getOrders(UUID customerId, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending()
-                .and(Sort.by(Sort.Direction.DESC, "id")));
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer id cannot be null");
+        }
 
-        Page<Order> orders = customerId == null
-                ? orderRepository.findAll(pageable)
-                : orderRepository.findAllByCustomerId(customerId, pageable);
+        Pageable pageable = orderPageable(page, size);
+
+        Page<Order> orders = orderRepository.findAllByCustomerId(customerId, pageable);
 
         return orders.map(OrderMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse getOrderById(UUID orderId) {
+    public boolean belongsToCustomer(UUID orderId, UUID customerId) {
+        if (orderId == null || customerId == null) {
+            return false;
+        }
+
+        return orderRepository.existsByIdAndCustomerId(orderId, customerId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> getAllOrders(int page, int size) {
+        Page<Order> orders = orderRepository.findAllWithItems(orderPageable(page, size));
+        return orders.map(OrderMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderById(UUID orderId, UUID customerId) {
+        Order order = orderRepository.findWithItemsByIdAndCustomerId(orderId, customerId)
+                .orElseThrow(() ->
+                        new OrderNotFoundException("Order not found with id: " + orderId)
+                );
+
+        return OrderMapper.toResponse(order);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderByIdForAdmin(UUID orderId) {
         Order order = orderRepository.findWithItemsById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found with id: " + orderId));
+
         return OrderMapper.toResponse(order);
+    }
+
+    private Pageable orderPageable(int page, int size) {
+        return PageRequest.of(page, size, Sort.by("createdAt").descending()
+                .and(Sort.by(Sort.Direction.DESC, "id")));
     }
 
     private Order findOrderById(UUID orderId) {

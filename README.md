@@ -121,7 +121,7 @@ Create local RSA key files for JWT signing and verification:
 ~/.ecommerce-keys/public.pem
 ```
 
-The Auth Service reads both keys; the API Gateway receives only `public.pem`. Keep the directory outside the repository and never commit its contents. Never commit real credentials. Start the stack directly with:
+The Auth Service reads both keys; the API Gateway, Customer Service, Order Service, Payment Service, and Product Service receive only `public.pem`. Keep the directory outside the repository and never commit its contents. Never commit real credentials. Start the stack directly with:
 
 ```bash
 docker compose up -d --build
@@ -136,10 +136,14 @@ The Gateway is available at `http://localhost:4002`. Common routes are:
 ```text
 GET  /products
 GET  /customers/{customerId}
-GET  /carts/current?customerId=...
+GET  /admin/customers
+GET  /carts/current
 POST /carts/{cartId}/checkout
 GET  /orders/{orderId}
+GET  /admin/orders
+GET  /admin/carts/{cartId}
 GET  /payments/order/{orderId}
+POST /payments/webhooks/stripe
 POST /auth/register
 POST /auth/login
 ```
@@ -152,14 +156,159 @@ The Auth Service uses the configured Spring Security `PasswordEncoder` and issue
 
 - issuer: `ecommerce-auth`
 - audience: `ecommerce-api`
-- subject: AuthUser UUID
+- subject: `AuthUser.id` (`JWT.sub`)
 - claims: `iat`, `exp`, `jti`, and `roles`
+- configured access-token lifetime: 15 minutes
 
 The Gateway is a stateless Spring Security OAuth2 Resource Server. It validates the RSA signature, RS256 algorithm, timestamp/expiration, issuer, and audience. `USER` and `ADMIN` roles map to `ROLE_USER` and `ROLE_ADMIN`.
 
-Gateway authorization rules allow public registration/login, public product GET requests, and the Stripe webhook from the JWT-authentication perspective. Customer, order, cart, and payment routes require authentication; product mutations require `ADMIN`. Other requests are denied.
+Public registration always creates a `USER`; the public Auth API does not accept or assign `ADMIN`. The current role model contains only `USER` and `ADMIN`, represented in the JWT `roles` claim and converted by Spring Security to `ROLE_*` authorities.
 
-Business services are not yet independent JWT Resource Servers and resource-level ownership checks are not implemented. Those are planned follow-up work; the current Gateway protects the public HTTP surface.
+Gateway authorization is coarse route and role authorization: registration/login, product GET requests, and the Stripe webhook are public from the JWT perspective; Customer, Order, Cart, and Payment routes require authentication; product mutations and `/admin/**` require `ADMIN`; other requests are denied. `POST /products/bulk-lookup` is an intentional exception at Product Service for the direct Order-to-Product compatibility call, but the Gateway's generic non-GET `/products/**` rule still requires `ADMIN`. Gateway checks are defense in depth and are not the only JWT validation boundary.
+
+Customer Service, Order Service, Payment Service, and Product Service are independent stateless OAuth2 Resource Servers. Each validates the RSA public-key signature with RS256, issuer `ecommerce-auth`, audience `ecommerce-api`, and standard timestamp/expiration claims before applying its own service-level authorization. Docker Compose mounts only `public.pem` into these services.
+
+Authentication, ownership authorization, and role authorization are separate concerns. The identity and ownership model is:
+
+```text
+JWT.sub
+  → AuthUser.id
+  → Customer.authUserId
+  → Customer.id
+```
+
+`AuthUser.id` and `Customer.id` are different service-owned identities. Client-supplied Customer, Cart, Address, and Order IDs identify requested resources but do not establish ownership.
+
+Normal user-facing APIs remain owner-scoped:
+
+```text
+/customers/**
+/orders/**
+/carts/**
+  → authenticated JWT
+  → current Customer resolution
+  → ownership check
+```
+
+Customer Service protects Customer and nested address operations, and `GET /customers` returns only the authenticated Customer. Non-owner Customer and Address resources use not-found semantics. Customer creation remains Kafka-driven through Auth registration; there is no public Customer creation flow.
+
+Customer administrative operations are explicit, require `ROLE_ADMIN`, and are limited to listing, reading, and deactivating Customers under `/admin/customers/**`. An `ADMIN` token does not automatically broaden normal `/customers/**` ownership checks. Customer Service also exposes the following internal lookup for current service-to-service ownership resolution:
+
+```text
+GET /internal/by-auth-user/{authUserId}
+```
+
+It requires a JWT at Customer Service, requires `JWT.sub` to match `{authUserId}`, and is not routed through the Gateway.
+
+For Order Service, the authenticated Customer owns `Cart.customerId` and `Order.customerId`. Checkout remains tied to that Customer. Order Service resolves the Customer through Customer Service by forwarding the same validated bearer token; Customer Service validates it independently and requires `JWT.sub` to match the internal lookup's `authUserId` path value.
+
+Order and Cart authorization follows the same ownership chain:
+
+```text
+JWT.sub
+  → Customer Service
+  → Customer.id
+  → Cart.customerId / Order.customerId
+```
+
+Normal Cart, checkout, and Order APIs remain owner-scoped. The explicit `/admin/orders/**` and `/admin/carts/**` APIs provide broad Order read/list access and broad Cart read-only access respectively. There is no admin checkout, admin Cart mutation, or manual admin Order lifecycle API. Order ownership lookup for Payment uses the internal endpoint below, which is not Gateway-routed:
+
+```text
+GET /internal/orders/{orderId}/ownership
+```
+
+Administrative access is intentionally separated from owner-facing APIs. An `ADMIN` token does not bypass ownership checks on `/customers/**`, `/orders/**`, or `/carts/**`. Wide administrative reads and Customer deactivation are available only through explicit `/admin/**` APIs:
+
+```text
+GET  /admin/customers
+GET  /admin/customers/{customerId}
+POST /admin/customers/{customerId}/deactivate
+
+GET  /admin/orders
+GET  /admin/orders/{orderId}
+
+GET  /admin/carts/{cartId}
+```
+
+All require `ROLE_ADMIN`. Admin APIs can list/read Customers, deactivate any Customer, list/read Orders, and read any Cart. Admin Cart access is read-only; there are no admin address mutation, Cart mutation, checkout, or Order lifecycle APIs. Stock, payment, Order confirmation/rejection, Cart completion/reopening, Saga transitions, Customer provisioning, and related Kafka workflows remain system-controlled.
+
+### Payment Service
+
+Payment Service independently validates the client JWT. Its normal HTTP API is authenticated and owner-scoped:
+
+```text
+GET /payments/order/{orderId}
+```
+
+The ownership flow is:
+
+```text
+Client JWT
+  → Payment Service validates JWT
+  → Payment forwards the bearer token to Order ownership lookup
+  → Order Service verifies the authenticated Customer owns the Order
+  → Payment lookup
+```
+
+Payment no longer resolves Customer directly. It uses Order ownership for authorization, and there is currently no Payment ADMIN API.
+
+### Stripe Webhook Boundary
+
+Stripe completion and expiry use a separate signature-based trust boundary:
+
+```text
+POST /payments/webhooks/stripe
+  → no JWT required
+  → Stripe-Signature verification required
+```
+
+The endpoint is intentionally not described as an anonymous business API: webhook authenticity is established by validating the Stripe signature with the configured webhook secret. Verified events remain idempotent and drive Payment state transitions and outbox processing.
+
+### Product Service
+
+Product Service independently validates JWTs for protected operations and does not use Customer or Order ownership. Its current policy is:
+
+```text
+GET /products/**
+  → public catalog reads
+
+POST /products/bulk-lookup
+  → public at Product Service for Order compatibility
+
+POST /products
+PATCH /products/{id}
+POST /products/{id}/deactivate
+DELETE /products/{id}
+  → ROLE_ADMIN
+```
+
+Order Service calls `POST /products/bulk-lookup` directly at Product Service without propagating a bearer token. This is an intentional current compatibility boundary. The Gateway still treats non-GET `/products/**` as an ADMIN route, so the bulk lookup is not a public Gateway operation.
+
+### Stock and Order Workflow Boundary
+
+Stock Service has no meaningful user-facing HTTP controller and remains Kafka/system-oriented. Order Workflow Service has no HTTP controller and remains Saga/Kafka-oriented. Their system operations do not require a user JWT layer because they do not expose user business APIs.
+
+### Direct Service Defense in Depth
+
+The Gateway is not the only security boundary. Customer, Order, Payment, and Product independently enforce their relevant rules when accessed directly:
+
+```text
+Customer  → JWT validation + ownership + ADMIN APIs
+Order     → JWT validation + Customer-based ownership + ADMIN APIs
+Payment   → JWT validation + Order-based ownership
+Product   → JWT validation for ADMIN mutations
+Webhook   → Stripe signature verification instead of JWT
+```
+
+### Current RBAC Summary
+
+| Resource | Normal API | ADMIN API / privilege |
+| --- | --- | --- |
+| Customer | Owner-scoped | `/admin/customers/**`: broad read and deactivate |
+| Order | Owner-scoped | `/admin/orders/**`: broad read/list |
+| Cart | Owner-scoped | `/admin/carts/**`: broad read-only |
+| Payment | Owner-scoped through Order | No ADMIN API |
+| Product | Public reads | Mutations require `ROLE_ADMIN` |
 
 ## Kafka Topology
 
@@ -193,7 +342,7 @@ Copy the printed `whsec_...` into `payment-service/.env.local` as `STRIPE_WEBHOO
 
 ## End-to-End Testing
 
-The scripts call the Gateway, create a unique Auth user, log in, capture a JWT, poll asynchronous Customer provisioning, and use the resulting Customer ID for authenticated commerce requests. They use read-only development DB queries only for internal states that have no public endpoint. They do not expose `provider_payment_id` through production APIs.
+The scripts call the Gateway, create a unique Auth user, log in, capture a JWT, and poll asynchronous Customer provisioning. Authenticated commerce requests use the JWT; the resulting Customer ID is retained only for provisioning correlation and does not control Cart or Order requests. They use read-only development DB queries only for internal states that have no public endpoint. They do not expose `provider_payment_id` through production APIs.
 
 The reusable bootstrap is:
 
@@ -295,6 +444,12 @@ The repository includes:
 - Stripe webhook signature tests
 - Auth Service PostgreSQL/Flyway integration tests
 - Gateway JWT and authorization integration tests
+- Customer JWT, issuer/audience/expiration, ownership, internal endpoint, and CustomerAddress authorization tests
+- Order/Cart ownership and bearer-token propagation tests
+- USER vs ADMIN tests for Customer, Order, Cart, Product, and Gateway `/admin/**` routes
+- Payment JWT, Order ownership, bearer propagation, and Stripe webhook boundary tests
+- Product JWT, public-read exception, bulk-lookup compatibility, and ADMIN mutation tests
+- Direct service enforcement tests for secured downstream services
 - Real Stripe E2E flows
 
 Run the multi-module suite with Docker available for Testcontainers:
@@ -305,7 +460,7 @@ mvn test
 
 ## Current State
 
-Implemented and locally verified: Auth Service registration/login and JWT issuance, transactional Auth Outbox, asynchronous Customer provisioning with Inbox idempotency, deterministic Kafka topic initialization, Gateway JWT validation and authorization, cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling.
+Implemented and locally verified: Auth Service registration/login and RS256 JWT issuance, transactional Auth Outbox, asynchronous Customer provisioning with Inbox idempotency, deterministic Kafka topic initialization, Gateway JWT validation and authorization, independent Customer/Order/Payment/Product JWT validation, Customer and Cart/Order ownership authorization, Payment ownership through Order ownership, Customer + Order RBAC with explicit ADMIN APIs, Product public reads with ADMIN-only mutations, Gateway ADMIN defense in depth, the Stripe signature-based webhook boundary, cart/checkout, order lifecycle, stock reservation and release, real Stripe Checkout, signed webhook processing, payment-expiry compensation, cart reopening, Saga completion/failure, and repeatable E2E tooling. Stock and Order Workflow remain Kafka/system-oriented without user-facing HTTP APIs.
 
 This is a development/portfolio project, not a production-scale performance claim.
 
@@ -313,8 +468,6 @@ This is a development/portfolio project, not a production-scale performance clai
 
 Not implemented yet:
 
-- Resource Server validation inside business services
-- Resource ownership authorization
 - Refresh tokens and explicit token revocation/logout
 - JWKS, key rotation, and MFA
 - Rate limiting

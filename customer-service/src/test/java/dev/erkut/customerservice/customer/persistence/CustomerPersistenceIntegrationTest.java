@@ -59,6 +59,7 @@ class CustomerPersistenceIntegrationTest {
         var customer = customerRepository.findByAuthUserId(authUserId).orElseThrow();
 
         var address = customerService.addCustomerAddress(customer.getId(),
+                authUserId,
                 new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom"));
         customerRepository.flush();
 
@@ -66,7 +67,7 @@ class CustomerPersistenceIntegrationTest {
         assertNotNull(address.customerAddressId());
         assertEquals(1, countAddresses(customer.getId()));
 
-        customerService.removeCustomerAddress(customer.getId(), address.customerAddressId());
+        customerService.removeCustomerAddress(customer.getId(), authUserId, address.customerAddressId());
         customerRepository.flush();
 
         assertEquals(0, countAddresses(customer.getId()));
@@ -94,14 +95,15 @@ class CustomerPersistenceIntegrationTest {
         provisionCustomer(authUserId, UUID.randomUUID(), uniqueEmail("inactive"));
         var customer = customerRepository.findByAuthUserId(authUserId).orElseThrow();
         var address = customerService.addCustomerAddress(customer.getId(),
+                authUserId,
                 new CustomerAddressCreateRequest("1 Main Street", "London", "United Kingdom"));
-        customerService.deactivateCustomer(customer.getId());
+        customerService.deactivateCustomer(customer.getId(), authUserId);
 
         assertThrows(InvalidCustomerStateException.class, () -> customerService.addCustomerAddress(
-                customer.getId(), new CustomerAddressCreateRequest(
+                customer.getId(), authUserId, new CustomerAddressCreateRequest(
                         "2 Main Street", "London", "United Kingdom")));
         assertThrows(InvalidCustomerStateException.class, () -> customerService.removeCustomerAddress(
-                customer.getId(), address.customerAddressId()));
+                customer.getId(), authUserId, address.customerAddressId()));
     }
 
     @Test

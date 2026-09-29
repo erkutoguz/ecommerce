@@ -5,6 +5,7 @@ import dev.erkut.orderservice.cart.application.CartService;
 import dev.erkut.orderservice.cart.application.exception.CartNotFoundException;
 import dev.erkut.orderservice.cart.domain.Cart;
 import dev.erkut.orderservice.cart.domain.exception.CartItemNotFoundException;
+import dev.erkut.orderservice.integration.customer.CurrentCustomerResolver;
 import dev.erkut.orderservice.integration.customer.InvalidCustomerStateException;
 import dev.erkut.orderservice.integration.product.InvalidProductStateException;
 import dev.erkut.orderservice.integration.product.ProductNotFoundException;
@@ -12,6 +13,7 @@ import dev.erkut.orderservice.api.error.GlobalExceptionHandler;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -49,9 +51,17 @@ class CartControllerTest {
     @MockitoBean
     private CartService cartService;
 
+    @MockitoBean
+    private CurrentCustomerResolver currentCustomerResolver;
+
+    @BeforeEach
+    void setUpCurrentCustomer() {
+        when(currentCustomerResolver.customerId()).thenReturn(CUSTOMER_ID);
+    }
+
     @Test
     void getCart_existingCart_shouldReturnMappedCart() throws Exception {
-        when(cartService.getCartById(CART_ID)).thenReturn(cartWithItem());
+        when(cartService.getCartById(CART_ID, CUSTOMER_ID)).thenReturn(cartWithItem());
 
         mockMvc.perform(get("/carts/{cartId}", CART_ID))
                 .andExpect(status().isOk())
@@ -60,12 +70,12 @@ class CartControllerTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.cartItems[0].productId").value(PRODUCT_ID.toString()))
                 .andExpect(jsonPath("$.cartItems[0].quantity").value(2));
-        verify(cartService).getCartById(CART_ID);
+        verify(cartService).getCartById(CART_ID, CUSTOMER_ID);
     }
 
     @Test
     void getCart_missingCart_shouldReturnNotFound() throws Exception {
-        when(cartService.getCartById(CART_ID))
+        when(cartService.getCartById(CART_ID, CUSTOMER_ID))
                 .thenThrow(new CartNotFoundException("Cart not found with id: " + CART_ID));
 
         mockMvc.perform(get("/carts/{cartId}", CART_ID))
@@ -77,7 +87,7 @@ class CartControllerTest {
     void getOpenCartByCustomerId_openCart_shouldReturnMappedCart() throws Exception {
         when(cartService.getOpenCartByCustomerId(CUSTOMER_ID)).thenReturn(cartWithItem());
 
-        mockMvc.perform(get("/carts/current").param("customerId", CUSTOMER_ID.toString()))
+        mockMvc.perform(get("/carts/current"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(CART_ID.toString()))
                 .andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
@@ -87,7 +97,7 @@ class CartControllerTest {
 
     @Test
     void addCartItem_validRequest_shouldReturnMappedCart() throws Exception {
-        when(cartService.addCartItem(CART_ID, PRODUCT_ID, 2)).thenReturn(cartWithItem());
+        when(cartService.addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 2)).thenReturn(cartWithItem());
 
         mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,7 +107,7 @@ class CartControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cartItems[0].productId").value(PRODUCT_ID.toString()))
                 .andExpect(jsonPath("$.cartItems[0].quantity").value(2));
-        verify(cartService).addCartItem(CART_ID, PRODUCT_ID, 2);
+        verify(cartService).addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 2);
     }
 
     @Test
@@ -109,7 +119,7 @@ class CartControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Request validation failed"));
-        verify(cartService, never()).addCartItem(any(), any(), anyInt());
+        verify(cartService, never()).addCartItem(any(), any(), any(), anyInt());
     }
 
     @Test
@@ -121,14 +131,14 @@ class CartControllerTest {
                                 """.formatted(PRODUCT_ID)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Request validation failed"));
-        verify(cartService, never()).addCartItem(any(), any(), anyInt());
+        verify(cartService, never()).addCartItem(any(), any(), any(), anyInt());
     }
 
     @Test
     void changeCartItemQuantity_validAbsoluteQuantity_shouldReturnMappedCart() throws Exception {
         Cart cart = cartWithItem();
         cart.changeCartItemQuantity(PRODUCT_ID, 5, CREATED_AT.plusSeconds(1));
-        when(cartService.changeCartItemQuantity(CART_ID, PRODUCT_ID, 5)).thenReturn(cart);
+        when(cartService.changeCartItemQuantity(CART_ID, CUSTOMER_ID, PRODUCT_ID, 5)).thenReturn(cart);
 
         mockMvc.perform(patch("/carts/{cartId}/items/{productId}", CART_ID, PRODUCT_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -137,7 +147,7 @@ class CartControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cartItems[0].quantity").value(5));
-        verify(cartService).changeCartItemQuantity(CART_ID, PRODUCT_ID, 5);
+        verify(cartService).changeCartItemQuantity(CART_ID, CUSTOMER_ID, PRODUCT_ID, 5);
     }
 
     @Test
@@ -149,19 +159,19 @@ class CartControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Request validation failed"));
-        verify(cartService, never()).changeCartItemQuantity(any(), any(), anyInt());
+        verify(cartService, never()).changeCartItemQuantity(any(), any(), any(), anyInt());
     }
 
     @Test
     void removeCartItem_success_shouldReturnNoContent() throws Exception {
         mockMvc.perform(delete("/carts/{cartId}/items/{productId}", CART_ID, PRODUCT_ID))
                 .andExpect(status().isNoContent());
-        verify(cartService).removeCartItem(CART_ID, PRODUCT_ID);
+        verify(cartService).removeCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID);
     }
 
     @Test
     void addCartItem_cartNotFound_shouldReturnNotFound() throws Exception {
-        when(cartService.addCartItem(CART_ID, PRODUCT_ID, 2))
+        when(cartService.addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 2))
                 .thenThrow(new CartNotFoundException("Cart not found with id: " + CART_ID));
 
         mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
@@ -176,7 +186,7 @@ class CartControllerTest {
     @Test
     void removeCartItem_missingItem_shouldReturnNotFound() throws Exception {
         doThrow(new CartItemNotFoundException("Cart item not found with product id: " + PRODUCT_ID))
-                .when(cartService).removeCartItem(CART_ID, PRODUCT_ID);
+                .when(cartService).removeCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID);
 
         mockMvc.perform(delete("/carts/{cartId}/items/{productId}", CART_ID, PRODUCT_ID))
                 .andExpect(status().isNotFound())
@@ -185,7 +195,7 @@ class CartControllerTest {
 
     @Test
     void addCartItem_productNotFound_shouldReturnNotFound() throws Exception {
-        when(cartService.addCartItem(eq(CART_ID), eq(PRODUCT_ID), eq(2)))
+        when(cartService.addCartItem(eq(CART_ID), eq(CUSTOMER_ID), eq(PRODUCT_ID), eq(2)))
                 .thenThrow(new ProductNotFoundException("Product not found with id(s): [" + PRODUCT_ID + "]"));
 
         mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
@@ -199,7 +209,7 @@ class CartControllerTest {
 
     @Test
     void addCartItem_inactiveProduct_shouldReturnConflict() throws Exception {
-        when(cartService.addCartItem(CART_ID, PRODUCT_ID, 2))
+        when(cartService.addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 2))
                 .thenThrow(new InvalidProductStateException("Product is not active"));
 
         mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
@@ -213,7 +223,7 @@ class CartControllerTest {
 
     @Test
     void addCartItem_lockedCart_shouldReturnConflict() throws Exception {
-        when(cartService.addCartItem(CART_ID, PRODUCT_ID, 2))
+        when(cartService.addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 2))
                 .thenThrow(new IllegalStateException("Cart must be active"));
 
         mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
@@ -230,7 +240,7 @@ class CartControllerTest {
         when(cartService.getOpenCartByCustomerId(CUSTOMER_ID))
                 .thenThrow(new InvalidCustomerStateException("Customer is not active"));
 
-        mockMvc.perform(get("/carts/current").param("customerId", CUSTOMER_ID.toString()))
+        mockMvc.perform(get("/carts/current"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Customer is not active"));
     }

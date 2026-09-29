@@ -54,25 +54,27 @@ class CartTransactionalServiceTest {
     @Test
     void addCartItem_shouldLoadCartAndApplyDomainMutation() {
         Cart cart = Cart.create(CUSTOMER_ID, NOW);
-        when(cartRepository.findById(CART_ID)).thenReturn(Optional.of(cart));
+        when(cartRepository.findWithCartItemsByIdAndCustomerId(CART_ID, CUSTOMER_ID))
+                .thenReturn(Optional.of(cart));
 
-        Cart result = transactionalService.addCartItem(CART_ID, PRODUCT_ID, 2, NOW);
+        Cart result = transactionalService.addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 2, NOW);
 
         assertSame(cart, result);
         assertEquals(1, result.getCartItems().size());
         assertEquals(PRODUCT_ID, result.getCartItems().getFirst().getProductId());
         assertEquals(2, result.getCartItems().getFirst().getQuantity());
-        verify(cartRepository).findById(CART_ID);
+        verify(cartRepository).findWithCartItemsByIdAndCustomerId(CART_ID, CUSTOMER_ID);
         verify(cartRepository, never()).save(any(Cart.class));
     }
 
     @Test
     void addCartItem_missingCart_shouldThrowCartNotFoundException() {
-        when(cartRepository.findById(CART_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findWithCartItemsByIdAndCustomerId(CART_ID, CUSTOMER_ID))
+                .thenReturn(Optional.empty());
 
         assertThrows(
                 CartNotFoundException.class,
-                () -> transactionalService.addCartItem(CART_ID, PRODUCT_ID, 1, NOW)
+                () -> transactionalService.addCartItem(CART_ID, CUSTOMER_ID, PRODUCT_ID, 1, NOW)
         );
         verify(cartRepository, never()).save(any(Cart.class));
     }

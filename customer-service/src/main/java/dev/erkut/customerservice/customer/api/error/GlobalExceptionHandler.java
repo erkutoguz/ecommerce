@@ -4,6 +4,7 @@ import dev.erkut.customerservice.customer.domain.exception.AddressNotFoundExcept
 import dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException;
 import dev.erkut.customerservice.customer.domain.exception.CustomerNotFoundException;
 import dev.erkut.customerservice.customer.domain.exception.InvalidCustomerStateException;
+import dev.erkut.customerservice.security.InvalidCurrentUserException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,16 @@ public class GlobalExceptionHandler {
 
         errors.put("error", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
+    }
+
+    @ExceptionHandler(InvalidCurrentUserException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidCurrentUser(
+            InvalidCurrentUserException ex
+    ) {
+        Map<String, String> errors = new HashMap<>();
+
+        errors.put("error", "Authentication required");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errors);
     }
 
     @ExceptionHandler(InvalidCustomerStateException.class)

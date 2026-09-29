@@ -1,11 +1,25 @@
 ### Step 8 - Out-of-stock flow
 # Product C has zero stock; checkout must be rejected.
+# Independent scenario: run after a fresh Auth.http bootstrap and repeat Customer provisioning if needed.
 
-GET {{baseUrl}}/carts/current?customerId={{customerId}}
+< {%
+    client.global.clear("outOfStockCartId");
+    client.global.clear("outOfStockOrderId");
+%}
+
+GET {{baseUrl}}/carts/current
 Authorization: Bearer {{accessToken}}
 
 > {%
-    client.global.set("outOfStockCartId", response.body.id);
+    const succeeded = response.status === 200 && response.body.id != null;
+    client.test("out-of-stock Cart is available", function () {
+        client.assert(succeeded, "Expected a current Cart with an id");
+    });
+    if (succeeded) {
+        client.global.set("outOfStockCartId", response.body.id);
+    } else {
+        client.global.clear("outOfStockCartId");
+    }
 %}
 
 ### Add the out-of-stock product
@@ -28,13 +42,38 @@ Authorization: Bearer {{accessToken}}
 }
 
 > {%
-    client.global.set("outOfStockOrderId", response.body.orderId);
+    const succeeded = response.status === 201 && response.body.orderId != null;
+    client.test("out-of-stock checkout creates an order", function () {
+        client.assert(succeeded, "Expected checkout to return an order id");
+    });
+    if (succeeded) {
+        client.global.set("outOfStockOrderId", response.body.orderId);
+    } else {
+        client.global.clear("outOfStockOrderId");
+    }
 %}
 
 ### After Kafka: expected REJECTED order
 GET {{baseUrl}}/orders/{{outOfStockOrderId}}
 Authorization: Bearer {{accessToken}}
 
+> {%
+    client.test("order is rejected for out of stock", function () {
+        client.assert(response.status === 200, "Expected the out-of-stock order to be readable");
+        client.assert(response.body.status === "REJECTED", "Order must be REJECTED");
+        client.assert(response.body.rejectionReason === "OUT_OF_STOCK", "Reason must be OUT_OF_STOCK");
+    });
+%}
+
 ### After Kafka: expected ACTIVE cart
 GET {{baseUrl}}/carts/{{outOfStockCartId}}
 Authorization: Bearer {{accessToken}}
+
+> {%
+    client.test("Cart is active after out-of-stock rejection", function () {
+        client.assert(response.status === 200, "Expected the Cart to be readable");
+        client.assert(response.body.status === "ACTIVE", "Cart must be ACTIVE");
+    });
+%}
+
+### Saga state is not exposed by the public API; verify FAILED through existing development tooling.
