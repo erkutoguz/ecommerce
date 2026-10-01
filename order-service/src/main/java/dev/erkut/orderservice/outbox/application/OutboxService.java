@@ -9,6 +9,7 @@ import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderservice.outbox.domain.OutboxStatus;
 import dev.erkut.orderservice.outbox.domain.exception.InvalidOutboxMessageException;
 import dev.erkut.orderservice.outbox.persistence.OutboxMessageRepository;
+import dev.erkut.orderservice.observability.tracing.OutboxTraceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -23,9 +24,16 @@ import java.util.UUID;
 public class OutboxService {
     private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
-    public OutboxService(OutboxMessageRepository outboxRepository, JsonMapper jsonMapper) {
+    private final OutboxTraceContext outboxTraceContext;
+
+    public OutboxService(
+            OutboxMessageRepository outboxRepository,
+            JsonMapper jsonMapper,
+            OutboxTraceContext outboxTraceContext
+    ) {
         this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Transactional(readOnly = true)
@@ -44,11 +52,12 @@ public class OutboxService {
 
         JsonNode payload = serialize(event);
 
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.ORDER_CHECKOUT_STARTED,
                 payload,
-                createdAt
+                createdAt,
+                outboxTraceContext.capture()
         );
 
         outboxRepository.save(message);
@@ -62,11 +71,12 @@ public class OutboxService {
 
         JsonNode payload = serialize(event);
 
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.ORDER_REJECTED_EVENT,
                 payload,
-                createdAt
+                createdAt,
+                outboxTraceContext.capture()
         );
 
         outboxRepository.save(message);
@@ -80,11 +90,12 @@ public class OutboxService {
 
         JsonNode payload = serialize(event);
 
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.ORDER_CONFIRMED_EVENT,
                 payload,
-                createdAt
+                createdAt,
+                outboxTraceContext.capture()
         );
 
         outboxRepository.save(message);
@@ -106,5 +117,22 @@ public class OutboxService {
         } catch (JacksonException ex) {
             throw new OutboxSerializationException("Event couldn't serialized", ex);
         }
+    }
+
+    private OutboxMessage createMessage(
+            UUID aggregateId,
+            OutboxMessageType messageType,
+            JsonNode payload,
+            Instant createdAt,
+            OutboxTraceContext.Headers traceContext
+    ) {
+        return OutboxMessage.create(
+                aggregateId,
+                messageType,
+                payload,
+                createdAt,
+                traceContext == null ? null : traceContext.traceparent(),
+                traceContext == null ? null : traceContext.tracestate()
+        );
     }
 }

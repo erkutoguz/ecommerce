@@ -61,13 +61,13 @@ public class OrderService {
     }
 
     @Transactional
-    public void handleRejectOrderCommand(MessageEnvelope envelope, RejectOrderCommand command) {
+    public boolean handleRejectOrderCommand(MessageEnvelope envelope, RejectOrderCommand command) {
         validateOrderCommand(envelope, command);
 
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, command.orderId(), now)) {
-            return;
+            return false;
         }
 
         Order order = reject(command.orderId(), command.rejectionReason(), now);
@@ -79,6 +79,7 @@ public class OrderService {
 
         OrderRejectedEvent event = new OrderRejectedEvent(command.orderId());
         outboxService.createOrderRejectedEvent(event, now);
+        return true;
     }
 
     @Transactional

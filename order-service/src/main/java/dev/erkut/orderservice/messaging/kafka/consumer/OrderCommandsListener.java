@@ -7,6 +7,7 @@ import dev.erkut.orderservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderservice.message.command.OrderCommandType;
 import dev.erkut.orderservice.message.command.RejectOrderCommand;
 import dev.erkut.orderservice.order.application.OrderService;
+import dev.erkut.orderservice.observability.metric.OrderMetrics;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -15,10 +16,16 @@ public class OrderCommandsListener {
 
     private final ConsumerUtil consumerUtil;
     private final OrderService orderService;
+    private final OrderMetrics orderMetrics;
 
-    public OrderCommandsListener(ConsumerUtil consumerUtil, OrderService orderService) {
+    public OrderCommandsListener(
+            ConsumerUtil consumerUtil,
+            OrderService orderService,
+            OrderMetrics orderMetrics
+    ) {
         this.consumerUtil = consumerUtil;
         this.orderService = orderService;
+        this.orderMetrics = orderMetrics;
     }
 
     @KafkaListener(
@@ -36,10 +43,13 @@ public class OrderCommandsListener {
         switch (commandType) {
             case REJECT_ORDER_COMMAND -> {
                 RejectOrderCommand command = consumerUtil.deserialize(envelope.payload(), RejectOrderCommand.class);
-                orderService.handleRejectOrderCommand(
+                boolean rejected = orderService.handleRejectOrderCommand(
                         envelope,
                         command
                 );
+                if (rejected) {
+                    orderMetrics.orderRejected(command.rejectionReason());
+                }
             }
             case MARK_ORDER_STOCK_RESERVED_COMMAND -> {
                 MarkOrderStockReservedCommand command =

@@ -7,6 +7,9 @@ import dev.erkut.orderservice.messaging.kafka.routing.KafkaTopicResolver;
 import dev.erkut.orderservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderservice.outbox.domain.OutboxStatus;
+import dev.erkut.orderservice.observability.tracing.OutboxTraceContext;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -60,7 +63,8 @@ class OutboxRelayTest {
                         TOPIC,
                         "order.commands",
                         "order.commands.DLT"
-                ))
+                )),
+                new OutboxTraceContext(Tracer.NOOP, Propagator.NOOP)
         );
     }
 

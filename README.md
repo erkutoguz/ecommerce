@@ -214,6 +214,8 @@ docker compose up -d --build
 
 The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs `kafka-init`, and then starts Kafka-dependent services only after topic initialization succeeds.
 
+Order Service is the current observability pilot. Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`; Prometheus and Tempo data sources plus a small Order Service dashboard are provisioned automatically. Order Service exposes checkout outcome, rejection, and Outbox backlog/age metrics, exports HTTP traces, and propagates trace context through its Outbox to Kafka. Other services are not yet instrumented, so system-wide distributed tracing is not complete. Its management port remains internal to Compose at `order-service:9090`.
+
 ## Main API Surface
 
 Representative Gateway routes:

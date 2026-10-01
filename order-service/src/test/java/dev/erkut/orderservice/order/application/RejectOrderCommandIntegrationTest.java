@@ -7,6 +7,7 @@ import dev.erkut.orderservice.inbox.persistence.InboxMessageRepository;
 import dev.erkut.orderservice.message.MessageEnvelope;
 import dev.erkut.orderservice.message.command.RejectOrderCommand;
 import dev.erkut.orderservice.message.event.OrderRejectedEvent;
+import dev.erkut.orderservice.messaging.kafka.consumer.OrderCommandsListener;
 import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.Order;
 import dev.erkut.orderservice.order.domain.OrderLineSnapshot;
@@ -19,6 +20,7 @@ import dev.erkut.orderservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderservice.outbox.domain.OutboxStatus;
 import dev.erkut.orderservice.outbox.persistence.OutboxMessageRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,6 +57,12 @@ class RejectOrderCommandIntegrationTest {
     private OrderService orderService;
 
     @Autowired
+    private OrderCommandsListener orderCommandsListener;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
+
+    @Autowired
     private CartRepository cartRepository;
 
     @Autowired
@@ -78,8 +86,11 @@ class RejectOrderCommandIntegrationTest {
         UUID messageId = UUID.randomUUID();
         RejectOrderCommand command = command(orderId);
         MessageEnvelope envelope = envelope(messageId, command);
+        double rejectedBefore = meterRegistry.counter(
+                "orders.rejected", "reason", "out_of_stock"
+        ).count();
 
-        orderService.handleRejectOrderCommand(envelope, command);
+        orderCommandsListener.listenOrderCommands(envelope);
 
         Order rejected = loadOrder(orderId);
         List<OutboxMessage> afterFirstDelivery = rejectedEvents(orderId);
@@ -93,6 +104,9 @@ class RejectOrderCommandIntegrationTest {
                 .filter(message -> message.getMessageId().equals(messageId))
                 .count());
         assertEquals(1, afterFirstDelivery.size());
+        assertEquals(rejectedBefore + 1.0, meterRegistry.counter(
+                "orders.rejected", "reason", "out_of_stock"
+        ).count());
 
         OutboxMessage outbox = afterFirstDelivery.getFirst();
         assertEquals(OutboxMessageType.ORDER_REJECTED_EVENT, outbox.getMessageType());
@@ -101,13 +115,16 @@ class RejectOrderCommandIntegrationTest {
         assertEquals(orderId, jsonMapper.treeToValue(outbox.getPayload(), OrderRejectedEvent.class).orderId());
 
         Instant rejectedAt = rejected.getRejectedAt();
-        orderService.handleRejectOrderCommand(envelope, command);
+        orderCommandsListener.listenOrderCommands(envelope);
 
         assertEquals(1, rejectedEvents(orderId).size());
         assertEquals(rejectedAt, loadOrder(orderId).getRejectedAt());
         assertEquals(1, inboxRepository.findAll().stream()
                 .filter(message -> message.getMessageId().equals(messageId))
                 .count());
+        assertEquals(rejectedBefore + 1.0, meterRegistry.counter(
+                "orders.rejected", "reason", "out_of_stock"
+        ).count());
     }
 
     @Test

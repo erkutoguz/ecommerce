@@ -61,7 +61,9 @@ class OutboxMessagePersistenceTest {
                     ORDER_ID,
                     OutboxMessageType.ORDER_CHECKOUT_STARTED,
                     PAYLOAD,
-                    CREATED_AT
+                    CREATED_AT,
+                    "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                    "vendor=value"
             );
             OutboxMessage saved = outboxMessageRepository.saveAndFlush(message);
             entityManager.clear();
@@ -79,5 +81,11 @@ class OutboxMessagePersistenceTest {
         assertEquals(OutboxMessageType.ORDER_CHECKOUT_STARTED, reloaded.getMessageType());
         assertEquals(CREATED_AT, reloaded.getCreatedAt());
         assertNull(reloaded.getPublishedAt());
+        assertEquals("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                reloaded.getTraceparent());
+        assertEquals("vendor=value", reloaded.getTracestate());
+        assertEquals(1, outboxMessageRepository.countByStatus(OutboxStatus.PENDING));
+        assertEquals(java.util.Optional.of(CREATED_AT),
+                outboxMessageRepository.findOldestCreatedAtByStatus(OutboxStatus.PENDING));
     }
 }
