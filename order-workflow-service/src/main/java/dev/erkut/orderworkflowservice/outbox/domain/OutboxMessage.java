@@ -37,13 +37,21 @@ public class OutboxMessage {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "traceparent", length = 55)
+    private String traceparent;
+
+    @Column(name = "tracestate", length = 512)
+    private String tracestate;
+
     protected OutboxMessage() {}
 
     private OutboxMessage(
             UUID aggregateId,
             OutboxMessageType messageType,
             JsonNode payload,
-            Instant createdAt
+            Instant createdAt,
+            String traceparent,
+            String tracestate
     ) {
         if (aggregateId == null) {
             throw new InvalidOutboxMessageException("Aggregate id cannot be null");
@@ -68,6 +76,8 @@ public class OutboxMessage {
         this.payload = payload;
         this.createdAt = createdAt;
         this.publishedAt = null;
+        this.traceparent = traceparent;
+        this.tracestate = tracestate;
     }
 
     public static OutboxMessage create(
@@ -76,7 +86,18 @@ public class OutboxMessage {
             JsonNode payload,
             Instant createdAt
     ) {
-        return new OutboxMessage(aggregateId, messageType, payload, createdAt);
+        return create(aggregateId, messageType, payload, createdAt, null, null);
+    }
+
+    public static OutboxMessage create(
+            UUID aggregateId,
+            OutboxMessageType messageType,
+            JsonNode payload,
+            Instant createdAt,
+            String traceparent,
+            String tracestate
+    ) {
+        return new OutboxMessage(aggregateId, messageType, payload, createdAt, traceparent, tracestate);
     }
 
     public void markPublished(Instant publishedAt) {
@@ -118,5 +139,13 @@ public class OutboxMessage {
 
     public Instant getPublishedAt() {
         return publishedAt;
+    }
+
+    public String getTraceparent() {
+        return traceparent;
+    }
+
+    public String getTracestate() {
+        return tracestate;
     }
 }

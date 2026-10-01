@@ -7,3 +7,8 @@ scrape_configs:
     static_configs:
       - targets:
           - order-service:9090
+  - job_name: order-workflow-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - order-workflow-service:9090

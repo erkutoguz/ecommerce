@@ -5,7 +5,10 @@ import dev.erkut.orderworkflowservice.message.event.Currency;
 import dev.erkut.orderworkflowservice.message.event.orderevents.OrderCheckoutStartedEvent;
 import dev.erkut.orderworkflowservice.message.event.orderevents.OrderConfirmedEvent;
 import dev.erkut.orderworkflowservice.message.event.orderevents.OrderRejectedEvent;
+import dev.erkut.orderworkflowservice.observability.metric.SagaMetrics;
 import dev.erkut.orderworkflowservice.saga.application.OrderSagaService;
+import dev.erkut.orderworkflowservice.saga.persistence.OrderSagaRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,8 +25,10 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OrderEventsListenerTest {
@@ -37,13 +42,22 @@ class OrderEventsListenerTest {
     @Mock
     private OrderSagaService orderSagaService;
 
+    @Mock
+    private OrderSagaRepository orderSagaRepository;
+
     private JsonMapper jsonMapper;
+    private SimpleMeterRegistry meterRegistry;
     private OrderEventsListener listener;
 
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new OrderEventsListener(orderSagaService, new ConsumerUtil(jsonMapper));
+        meterRegistry = new SimpleMeterRegistry();
+        listener = new OrderEventsListener(
+                orderSagaService,
+                new ConsumerUtil(jsonMapper),
+                new SagaMetrics(meterRegistry, orderSagaRepository)
+        );
     }
 
     @Test
@@ -55,11 +69,27 @@ class OrderEventsListenerTest {
         );
         ArgumentCaptor<OrderCheckoutStartedEvent> eventCaptor =
                 ArgumentCaptor.forClass(OrderCheckoutStartedEvent.class);
+        when(orderSagaService.handleOrderCheckoutStarted(eq(envelope), any())).thenReturn(true);
 
         listener.handleOrderEvents(envelope);
 
         verify(orderSagaService).handleOrderCheckoutStarted(eq(envelope), eventCaptor.capture());
         assertEquals(expectedEvent, eventCaptor.getValue());
+        assertEquals(1.0, meterRegistry.counter("sagas.started").count());
+    }
+
+    @Test
+    void handleOrderEvents_duplicateCheckoutStarted_shouldNotCountAnotherSaga() {
+        OrderCheckoutStartedEvent event = event();
+        MessageEnvelope envelope = envelope(
+                OrderCheckoutStartedEvent.MESSAGE_TYPE,
+                jsonMapper.valueToTree(event)
+        );
+        when(orderSagaService.handleOrderCheckoutStarted(eq(envelope), any())).thenReturn(false);
+
+        listener.handleOrderEvents(envelope);
+
+        assertEquals(0.0, meterRegistry.counter("sagas.started").count());
     }
 
     @Test
@@ -71,11 +101,26 @@ class OrderEventsListenerTest {
         );
         ArgumentCaptor<OrderRejectedEvent> eventCaptor =
                 ArgumentCaptor.forClass(OrderRejectedEvent.class);
+        when(orderSagaService.handleOrderRejectedEvent(eq(envelope), any())).thenReturn(true);
 
         listener.handleOrderEvents(envelope);
 
         verify(orderSagaService).handleOrderRejectedEvent(eq(envelope), eventCaptor.capture());
         assertEquals(ORDER_ID, eventCaptor.getValue().orderId());
+        assertEquals(1.0, meterRegistry.counter("sagas.failed").count());
+    }
+
+    @Test
+    void handleOrderEvents_duplicateOrderRejected_shouldNotCountAnotherFailure() {
+        MessageEnvelope envelope = envelope(
+                "ORDER_REJECTED_EVENT",
+                jsonMapper.valueToTree(new OrderRejectedEvent(ORDER_ID))
+        );
+        when(orderSagaService.handleOrderRejectedEvent(eq(envelope), any())).thenReturn(false);
+
+        listener.handleOrderEvents(envelope);
+
+        assertEquals(0.0, meterRegistry.counter("sagas.failed").count());
     }
 
     @Test
@@ -87,11 +132,26 @@ class OrderEventsListenerTest {
         );
         ArgumentCaptor<OrderConfirmedEvent> eventCaptor =
                 ArgumentCaptor.forClass(OrderConfirmedEvent.class);
+        when(orderSagaService.handleOrderConfirmedEvent(eq(envelope), any())).thenReturn(true);
 
         listener.handleOrderEvents(envelope);
 
         verify(orderSagaService).handleOrderConfirmedEvent(eq(envelope), eventCaptor.capture());
         assertEquals(expectedEvent, eventCaptor.getValue());
+        assertEquals(1.0, meterRegistry.counter("sagas.completed").count());
+    }
+
+    @Test
+    void handleOrderEvents_duplicateOrderConfirmed_shouldNotCountAnotherCompletion() {
+        MessageEnvelope envelope = envelope(
+                "ORDER_CONFIRMED_EVENT",
+                jsonMapper.valueToTree(new OrderConfirmedEvent(ORDER_ID))
+        );
+        when(orderSagaService.handleOrderConfirmedEvent(eq(envelope), any())).thenReturn(false);
+
+        listener.handleOrderEvents(envelope);
+
+        assertEquals(0.0, meterRegistry.counter("sagas.completed").count());
     }
 
     @Test

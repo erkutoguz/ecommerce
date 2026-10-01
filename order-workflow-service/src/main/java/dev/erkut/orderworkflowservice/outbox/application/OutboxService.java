@@ -13,6 +13,7 @@ import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxStatus;
 import dev.erkut.orderworkflowservice.outbox.persistence.OutboxMessageRepository;
+import dev.erkut.orderworkflowservice.observability.tracing.OutboxTraceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -28,10 +29,16 @@ public class OutboxService {
 
     private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
+    private final OutboxTraceContext outboxTraceContext;
 
-    public OutboxService(OutboxMessageRepository outboxRepository, JsonMapper jsonMapper) {
+    public OutboxService(
+            OutboxMessageRepository outboxRepository,
+            JsonMapper jsonMapper,
+            OutboxTraceContext outboxTraceContext
+    ) {
         this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Transactional
@@ -41,7 +48,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.RESERVE_STOCK_COMMAND,
                 payload,
@@ -58,7 +65,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.REJECT_ORDER_COMMAND,
                 payload,
@@ -74,7 +81,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.INITIATE_PAYMENT_COMMAND,
                 payload,
@@ -93,7 +100,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.MARK_ORDER_STOCK_RESERVED_COMMAND,
                 payload,
@@ -112,7 +119,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.MARK_ORDER_PAYMENT_COMPLETED_COMMAND,
                 payload,
@@ -128,7 +135,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.CONFIRM_STOCK_RESERVATION_COMMAND,
                 payload,
@@ -144,7 +151,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.RELEASE_STOCK_RESERVATION_COMMAND,
                 payload,
@@ -160,7 +167,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 command.orderId(),
                 OutboxMessageType.CONFIRM_ORDER_COMMAND,
                 payload,
@@ -192,5 +199,22 @@ public class OutboxService {
         } catch (JacksonException exception) {
             throw new OutboxSerializationException("Command could not be serialized", exception);
         }
+    }
+
+    private OutboxMessage createMessage(
+            UUID aggregateId,
+            OutboxMessageType messageType,
+            JsonNode payload,
+            Instant createdAt
+    ) {
+        OutboxTraceContext.Headers headers = outboxTraceContext.capture();
+        return OutboxMessage.create(
+                aggregateId,
+                messageType,
+                payload,
+                createdAt,
+                headers == null ? null : headers.traceparent(),
+                headers == null ? null : headers.tracestate()
+        );
     }
 }

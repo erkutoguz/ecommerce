@@ -216,6 +216,8 @@ The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs 
 
 Order Service is the current observability pilot. Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`; Prometheus and Tempo data sources plus a small Order Service dashboard are provisioned automatically. Order Service exposes checkout outcome, rejection, and Outbox backlog/age metrics, exports HTTP traces, and propagates trace context through its Outbox to Kafka. Other services are not yet instrumented, so system-wide distributed tracing is not complete. Its management port remains internal to Compose at `order-service:9090`.
 
+Order Workflow Service now continues propagated Order traces from Kafka and propagates context through its own Outbox to downstream Kafka commands. Its Actuator endpoints remain internal at `order-workflow-service:9090`; Workflow metrics and a dedicated dashboard are provisioned in the shared Prometheus/Grafana stack. Downstream service trace continuation is not yet instrumented.
+
 ## Main API Surface
 
 Representative Gateway routes:

@@ -5,6 +5,9 @@ import dev.erkut.orderworkflowservice.messaging.kafka.producer.KafkaMessagePubli
 import dev.erkut.orderworkflowservice.messaging.kafka.routing.KafkaTopicResolver;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderworkflowservice.outbox.domain.OutboxMessage;
+import dev.erkut.orderworkflowservice.observability.tracing.OutboxTraceContext;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,7 +54,12 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        relay = new OutboxRelay(messagePublisher, topicResolver, outboxService);
+        relay = new OutboxRelay(
+                messagePublisher,
+                topicResolver,
+                outboxService,
+                new OutboxTraceContext(Tracer.NOOP, Propagator.NOOP)
+        );
     }
 
     @Test
