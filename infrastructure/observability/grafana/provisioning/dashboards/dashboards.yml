@@ -20,3 +20,13 @@ providers:
     options:
       path: /var/lib/grafana/workflow-dashboards
       foldersFromFilesStructure: false
+
+  - name: Stock Service
+    orgId: 1
+    folder: Stock Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/stock-dashboards
+      foldersFromFilesStructure: false

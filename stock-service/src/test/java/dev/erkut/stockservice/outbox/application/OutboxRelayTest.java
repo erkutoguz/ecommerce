@@ -3,11 +3,14 @@ package dev.erkut.stockservice.outbox.application;
 import dev.erkut.stockservice.message.MessageEnvelope;
 import dev.erkut.stockservice.messaging.kafka.producer.KafkaMessagePublisher;
 import dev.erkut.stockservice.messaging.kafka.routing.KafkaTopicResolver;
+import dev.erkut.stockservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.stockservice.outbox.domain.OutboxMessage;
 import dev.erkut.stockservice.outbox.domain.OutboxMessageType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -47,7 +50,12 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        relay = new OutboxRelay(outboxService, messagePublisher, topicResolver);
+        relay = new OutboxRelay(
+                outboxService,
+                messagePublisher,
+                topicResolver,
+                new OutboxTraceContext(Tracer.NOOP, Propagator.NOOP)
+        );
     }
 
     @Test
