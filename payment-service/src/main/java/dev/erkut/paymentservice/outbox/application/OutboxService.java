@@ -7,6 +7,7 @@ import dev.erkut.paymentservice.outbox.domain.OutboxMessage;
 import dev.erkut.paymentservice.outbox.domain.OutboxMessageType;
 import dev.erkut.paymentservice.outbox.domain.OutboxStatus;
 import dev.erkut.paymentservice.outbox.persistence.OutboxMessageRepository;
+import dev.erkut.paymentservice.observability.tracing.OutboxTraceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -22,13 +23,16 @@ public class OutboxService {
 
     private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
+    private final OutboxTraceContext outboxTraceContext;
 
     public OutboxService(
             OutboxMessageRepository outboxRepository,
-            JsonMapper jsonMapper
+            JsonMapper jsonMapper,
+            OutboxTraceContext outboxTraceContext
     ) {
         this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Transactional
@@ -41,11 +45,14 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(event);
+        OutboxTraceContext.Headers headers = outboxTraceContext.capture();
         OutboxMessage message = OutboxMessage.create(
                 event.orderId(),
                 OutboxMessageType.PAYMENT_COMPLETED_EVENT,
                 payload,
-                createdAt
+                createdAt,
+                headers == null ? null : headers.traceparent(),
+                headers == null ? null : headers.tracestate()
         );
         outboxRepository.save(message);
     }
@@ -60,11 +67,14 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(event);
+        OutboxTraceContext.Headers headers = outboxTraceContext.capture();
         OutboxMessage message = OutboxMessage.create(
                 event.orderId(),
                 OutboxMessageType.PAYMENT_FAILED_EVENT,
                 payload,
-                createdAt
+                createdAt,
+                headers == null ? null : headers.traceparent(),
+                headers == null ? null : headers.tracestate()
         );
         outboxRepository.save(message);
     }

@@ -35,6 +35,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -113,6 +116,12 @@ class PaymentServiceApplicationTests {
 
     @Autowired
     private StripeWebhookService stripeWebhookService;
+
+    @Autowired
+    private Tracer tracer;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     @Autowired
     private MockMvc mockMvc;
@@ -347,6 +356,42 @@ class PaymentServiceApplicationTests {
     }
 
     @Test
+    void completedWebhook_shouldIncrementMetricOnlyForNewTransition() throws Exception {
+        UUID orderId = UUID.fromString("80000000-0000-0000-0000-000000000222");
+        persistAwaitingPayment(orderId, "cs_test_metric_completed");
+        String payload = completedPayload("evt_test_metric_completed", "cs_test_metric_completed", 1_700_000_002L);
+        double before = meterRegistry.get("payments.completed").counter().count();
+        String signature = signature(payload);
+
+        stripeWebhookService.handle(payload, signature);
+        stripeWebhookService.handle(payload, signature);
+
+        assertEquals(before + 1, meterRegistry.get("payments.completed").counter().count());
+    }
+
+    @Test
+    void paymentEventOutbox_shouldPersistCurrentW3cTraceContext() {
+        UUID orderId = UUID.fromString("80000000-0000-0000-0000-000000000223");
+        persistAwaitingPayment(orderId, "cs_test_trace_context");
+        Span parent = tracer.nextSpan().name("test.payment.parent").start();
+
+        try (Tracer.SpanInScope ignored = tracer.withSpan(parent)) {
+            paymentService.handlePaymentCompleted(
+                    "evt_test_trace_context",
+                    "checkout.session.completed",
+                    "cs_test_trace_context",
+                    OCCURRED_AT
+            );
+        } finally {
+            parent.end();
+        }
+
+        var outboxMessage = outboxRepository.findAll().getFirst();
+        assertTrue(outboxMessage.getTraceparent().contains(parent.context().traceId()));
+        assertTrue(outboxMessage.getTraceparent().startsWith("00-"));
+    }
+
+    @Test
     void handlePaymentCompleted_shouldRollbackWebhookInboxWhenPaymentIsMissing() {
         assertThrows(
                 PaymentNotFoundException.class,
@@ -393,7 +438,9 @@ class PaymentServiceApplicationTests {
         long eventCreated = 1_700_000_000L;
         persistAwaitingPayment(orderId, providerPaymentId);
         String payload = expiredPayload("evt_test_expired", providerPaymentId, eventCreated);
+        double failuresBefore = meterRegistry.counter("payments.failed", "reason", "expired").count();
 
+        stripeWebhookService.handle(payload, signature(payload));
         stripeWebhookService.handle(payload, signature(payload));
 
         Payment payment = paymentRepository.findById(orderId).orElseThrow();
@@ -409,6 +456,8 @@ class PaymentServiceApplicationTests {
         assertEquals(orderId.toString(), outboxMessage.getPayload().get("orderId").asText());
         assertEquals(PaymentFailureReason.SESSION_EXPIRED.name(),
                 outboxMessage.getPayload().get("failureReason").asText());
+        assertEquals(failuresBefore + 1,
+                meterRegistry.counter("payments.failed", "reason", "expired").count());
     }
 
     @Test

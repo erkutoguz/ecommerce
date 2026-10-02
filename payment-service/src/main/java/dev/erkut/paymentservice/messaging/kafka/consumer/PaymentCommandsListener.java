@@ -4,6 +4,7 @@ import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.PaymentCommandType;
 import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
 import dev.erkut.paymentservice.payment.application.PaymentService;
+import dev.erkut.paymentservice.observability.metric.PaymentMetrics;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -12,10 +13,16 @@ public class PaymentCommandsListener {
 
     private final PaymentService paymentService;
     private final ConsumerUtil consumerUtil;
+    private final PaymentMetrics paymentMetrics;
 
-    public PaymentCommandsListener(PaymentService paymentService, ConsumerUtil consumerUtil) {
+    public PaymentCommandsListener(
+            PaymentService paymentService,
+            ConsumerUtil consumerUtil,
+            PaymentMetrics paymentMetrics
+    ) {
         this.paymentService = paymentService;
         this.consumerUtil = consumerUtil;
+        this.paymentMetrics = paymentMetrics;
     }
 
     @KafkaListener(
@@ -34,7 +41,9 @@ public class PaymentCommandsListener {
             case INITIATE_PAYMENT_COMMAND -> {
                 InitiatePaymentCommand command =
                         consumerUtil.deserialize(envelope.payload(), InitiatePaymentCommand.class);
-                paymentService.handleInitiatePaymentCommand(envelope, command);
+                if (paymentService.handleInitiatePaymentCommand(envelope, command)) {
+                    paymentMetrics.paymentStarted();
+                }
             }
         }
 

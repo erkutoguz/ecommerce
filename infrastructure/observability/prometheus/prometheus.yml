@@ -17,3 +17,8 @@ scrape_configs:
     static_configs:
       - targets:
           - stock-service:9090
+  - job_name: payment-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - payment-service:9090

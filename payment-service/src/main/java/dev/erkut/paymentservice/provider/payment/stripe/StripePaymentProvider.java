@@ -6,6 +6,8 @@ import com.stripe.model.checkout.Session;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.checkout.SessionCreateParams;
 import dev.erkut.paymentservice.payment.domain.Currency;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import dev.erkut.paymentservice.provider.payment.PaymentProvider;
 import dev.erkut.paymentservice.provider.payment.PaymentSession;
 import dev.erkut.paymentservice.provider.payment.exception.PaymentProviderException;
@@ -22,13 +24,16 @@ public class StripePaymentProvider implements PaymentProvider {
 
     private final StripeClient stripeClient;
     private final StripeProperties properties;
+    private final ObservationRegistry observationRegistry;
 
     public StripePaymentProvider(
             StripeClient stripeClient,
-            StripeProperties properties
+            StripeProperties properties,
+            ObservationRegistry observationRegistry
     ) {
         this.stripeClient = stripeClient;
         this.properties = properties;
+        this.observationRegistry = observationRegistry;
     }
 
     @Override
@@ -38,8 +43,22 @@ public class StripePaymentProvider implements PaymentProvider {
             Currency currency
     ) {
         try {
-            Session session =
-                    createCheckoutSessionObject(orderId, totalAmount, currency);
+            Observation observation = Observation.createNotStarted(
+                            "stripe.checkout_session.create",
+                            observationRegistry
+                    )
+                    .lowCardinalityKeyValue("provider", "stripe")
+                    .lowCardinalityKeyValue("operation", "checkout_session_create");
+            Session session;
+            observation.start();
+            try (Observation.Scope ignored = observation.openScope()) {
+                session = createCheckoutSessionObject(orderId, totalAmount, currency);
+            } catch (StripeException | RuntimeException exception) {
+                observation.error(exception);
+                throw exception;
+            } finally {
+                observation.stop();
+            }
 
             return new PaymentSession(
                     session.getId(),
@@ -48,7 +67,8 @@ public class StripePaymentProvider implements PaymentProvider {
 
         } catch (StripeException e) {
             throw new PaymentProviderException("Failed to initialize Stripe checkout session", e);
-        }}
+        }
+    }
 
     private Session createCheckoutSessionObject(
             UUID orderId,

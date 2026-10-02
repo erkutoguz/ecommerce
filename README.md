@@ -214,11 +214,11 @@ docker compose up -d --build
 
 The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs `kafka-init`, and then starts Kafka-dependent services only after topic initialization succeeds.
 
-Order Service is the current observability pilot. Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`; Prometheus and Tempo data sources plus service dashboards are provisioned automatically. Order Service exposes checkout outcome, rejection, and Outbox backlog/age metrics, exports HTTP traces, and propagates trace context through its Outbox to Kafka. Payment and remaining services are not yet instrumented, so system-wide distributed tracing is not complete. Its management port remains internal to Compose at `order-service:9090`.
+Order, Workflow, and Stock observability is in place, and Payment now has internal Actuator endpoints, Payment/Outbox metrics, Tempo tracing, Kafka observation, and a provisioned dashboard. Payment is configured to preserve W3C context through its Outbox; Stripe webhook callbacks start separate traces because Stripe does not propagate our context. The Payment HTTP trace and Prometheus scrape are verified; a full Payment Stripe E2E trace is not yet claimed because the local E2E stock precondition was already dirty. Grafana is at `http://localhost:3000` and Prometheus at `http://localhost:9091`; all management ports remain internal to Compose. Observability and end-to-end tracing for the remaining services are not complete.
 
 Order Workflow Service continues propagated Order traces from Kafka and propagates context through its Outbox to downstream Kafka commands. Its Actuator endpoints remain internal at `order-workflow-service:9090`; Workflow metrics and a dedicated dashboard are provisioned in the shared Prometheus/Grafana stack.
 
-Stock Service now exposes internal Actuator endpoints, reservation/Outbox metrics, tracing, and a provisioned Grafana dashboard. A real trace has been verified through Order → Workflow → Stock and back to Workflow via Kafka; Payment and remaining services are not yet instrumented. Stock management remains internal at `stock-service:9090`.
+Stock Service now exposes internal Actuator endpoints, reservation/Outbox metrics, tracing, and a provisioned Grafana dashboard. A real trace has been verified through Order → Workflow → Stock and back to Workflow via Kafka. Stock management remains internal at `stock-service:9090`.
 
 ## Main API Surface
 

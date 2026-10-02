@@ -4,6 +4,7 @@ import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.message.command.Currency;
 import dev.erkut.paymentservice.message.command.InitiatePaymentCommand;
 import dev.erkut.paymentservice.payment.application.PaymentService;
+import dev.erkut.paymentservice.observability.metric.PaymentMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentCommandsListenerTest {
@@ -32,13 +34,16 @@ class PaymentCommandsListenerTest {
     @Mock
     private PaymentService paymentService;
 
+    @Mock
+    private PaymentMetrics paymentMetrics;
+
     private JsonMapper jsonMapper;
     private PaymentCommandsListener listener;
 
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new PaymentCommandsListener(paymentService, new ConsumerUtil(jsonMapper));
+        listener = new PaymentCommandsListener(paymentService, new ConsumerUtil(jsonMapper), paymentMetrics);
     }
 
     @Test
@@ -54,11 +59,13 @@ class PaymentCommandsListenerTest {
         );
         ArgumentCaptor<InitiatePaymentCommand> commandCaptor =
                 ArgumentCaptor.forClass(InitiatePaymentCommand.class);
+        when(paymentService.handleInitiatePaymentCommand(eq(envelope), eq(expectedCommand))).thenReturn(true);
 
         listener.handlePaymentCommands(envelope);
 
         verify(paymentService).handleInitiatePaymentCommand(eq(envelope), commandCaptor.capture());
         assertEquals(expectedCommand, commandCaptor.getValue());
+        verify(paymentMetrics).paymentStarted();
     }
 
     @Test

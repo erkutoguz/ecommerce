@@ -79,6 +79,7 @@ services:
       - --storage.tsdb.path=/prometheus
     depends_on:
       - order-service
+      - payment-service
     networks:
       - app-network
     restart: unless-stopped
@@ -104,6 +105,7 @@ services:
       - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./infrastructure/observability/grafana/workflow-dashboards:/var/lib/grafana/workflow-dashboards:ro
       - ./infrastructure/observability/grafana/stock-dashboards:/var/lib/grafana/stock-dashboards:ro
+      - ./infrastructure/observability/grafana/payment-dashboards:/var/lib/grafana/payment-dashboards:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     depends_on:
@@ -333,6 +335,7 @@ services:
     env_file:
       - ./payment-service/.env.local
     environment:
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
       ORDER_SERVICE_BASE_URL: http://order-service:4000
       SPRING_DATASOURCE_URL: jdbc:postgresql://payment-db:5432/payment
       SPRING_DATASOURCE_USERNAME: payment

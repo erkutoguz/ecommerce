@@ -12,6 +12,7 @@ import dev.erkut.paymentservice.payment.domain.Currency;
 import dev.erkut.paymentservice.provider.payment.PaymentSession;
 import dev.erkut.paymentservice.provider.payment.exception.PaymentProviderException;
 import dev.erkut.paymentservice.provider.payment.stripe.config.StripeProperties;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -63,7 +64,9 @@ class StripePaymentProviderTest {
                 any(RequestOptions.class),
                 any(ApiMode.class)
         )).thenReturn(session);
-        StripePaymentProvider provider = new StripePaymentProvider(new StripeClient(responseGetter), PROPERTIES);
+        StripePaymentProvider provider = new StripePaymentProvider(
+                new StripeClient(responseGetter), PROPERTIES, ObservationRegistry.NOOP
+        );
         ArgumentCaptor<Map<String, Object>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
         ArgumentCaptor<RequestOptions> optionsCaptor = ArgumentCaptor.forClass(RequestOptions.class);
 
@@ -124,7 +127,9 @@ class StripePaymentProviderTest {
                 any(RequestOptions.class),
                 any(ApiMode.class)
         )).thenThrow(stripeException);
-        StripePaymentProvider provider = new StripePaymentProvider(new StripeClient(responseGetter), PROPERTIES);
+        StripePaymentProvider provider = new StripePaymentProvider(
+                new StripeClient(responseGetter), PROPERTIES, ObservationRegistry.NOOP
+        );
 
         PaymentProviderException exception = assertThrows(
                 PaymentProviderException.class,

@@ -1,0 +1,78 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 0,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "up{job=\"payment-service\"}", "refId": "A"}],
+      "title": "Payment Service UP",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 9, "x": 6, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum(rate(payments_started_total{job=\"payment-service\"}[5m]))", "legendFormat": "started", "refId": "A"}],
+      "title": "Payment Initiation Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 9, "x": 15, "y": 0},
+      "id": 3,
+      "targets": [{"expr": "sum(rate(payments_completed_total{job=\"payment-service\"}[5m]))", "legendFormat": "completed", "refId": "A"}],
+      "title": "Payment Completion Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "sum by (reason) (rate(payments_failed_total{job=\"payment-service\"}[5m]))", "legendFormat": "{{reason}}", "refId": "A"}],
+      "title": "Payment Failures by Reason",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+      "id": 5,
+      "targets": [{"expr": "payments_pending{job=\"payment-service\"}", "legendFormat": "awaiting customer action", "refId": "A"}],
+      "title": "Pending Payments",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+      "id": 6,
+      "targets": [{"expr": "payments_oldest_pending_age_seconds{job=\"payment-service\"}", "legendFormat": "oldest pending age", "refId": "A"}],
+      "title": "Oldest Pending Payment Age",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+      "id": 7,
+      "targets": [{"expr": "payment_outbox_pending_messages{job=\"payment-service\"}", "legendFormat": "pending", "refId": "A"}],
+      "title": "Pending Outbox Messages",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+      "id": 8,
+      "targets": [{"expr": "payment_outbox_oldest_pending_age_seconds{job=\"payment-service\"}", "legendFormat": "oldest pending age", "refId": "A"}],
+      "title": "Oldest Pending Outbox Age",
+      "type": "stat"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 41,
+  "tags": ["payment-service", "payments", "observability"],
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Payment Service",
+  "uid": "payment-service-observability",
+  "version": 1
+}
