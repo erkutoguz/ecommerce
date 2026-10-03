@@ -47,6 +47,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
       "id": 6,
+      "fieldConfig": {"defaults": {"unit": "s"}},
       "targets": [{"expr": "payments_oldest_pending_age_seconds{job=\"payment-service\"}", "legendFormat": "oldest pending age", "refId": "A"}],
       "title": "Oldest Pending Payment Age",
       "type": "stat"
@@ -63,6 +64,7 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
       "id": 8,
+      "fieldConfig": {"defaults": {"unit": "s"}},
       "targets": [{"expr": "payment_outbox_oldest_pending_age_seconds{job=\"payment-service\"}", "legendFormat": "oldest pending age", "refId": "A"}],
       "title": "Oldest Pending Outbox Age",
       "type": "stat"

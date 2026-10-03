@@ -51,7 +51,7 @@ public class AuthService {
         String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
 
         if (authUserRepository.existsByEmail(normalizedEmail)) {
-            throw new EmailAlreadyExistsException("User with email " + normalizedEmail + " already exists");
+            throw new EmailAlreadyExistsException("User with email already exists");
         }
 
         Instant now = Instant.now();
@@ -73,7 +73,7 @@ public class AuthService {
             }
 
             throw new EmailAlreadyExistsException(
-                    "User with email " + normalizedEmail + " already exists"
+                    "User with email already exists"
             );
         }
 

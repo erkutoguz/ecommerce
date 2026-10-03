@@ -393,7 +393,7 @@ class PaymentServiceApplicationTests {
 
     @Test
     void handlePaymentCompleted_shouldRollbackWebhookInboxWhenPaymentIsMissing() {
-        assertThrows(
+        PaymentNotFoundException exception = assertThrows(
                 PaymentNotFoundException.class,
                 () -> paymentService.handlePaymentCompleted(
                         "evt_test_missing_payment",
@@ -402,6 +402,8 @@ class PaymentServiceApplicationTests {
                         OCCURRED_AT
                 )
         );
+
+        assertEquals("Payment not found for provider session", exception.getMessage());
 
         assertEquals(0, webhookEventRepository.count());
         assertEquals(0, outboxRepository.count());

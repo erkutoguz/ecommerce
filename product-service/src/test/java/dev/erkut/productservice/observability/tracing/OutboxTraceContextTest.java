@@ -15,12 +15,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OutboxTraceContextTest {
 
     private static final String TRACEPARENT =
             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    private static final String NEXT_TRACEPARENT =
+            "00-11111111111111111111111111111111-2222222222222222-01";
 
     private Tracer tracer;
     private TestPropagator propagator;
@@ -43,7 +46,7 @@ class OutboxTraceContextTest {
     }
 
     @Test
-    void runWithParentExtractsAndScopesPersistedContext() {
+    void runWithParentScopesEachRowAndDoesNotLeakToNextRow() {
         Span relaySpan = mock(Span.class);
         Span.Builder builder = mock(Span.Builder.class);
         when(builder.name("product.outbox.relay")).thenReturn(builder);
@@ -63,6 +66,18 @@ class OutboxTraceContextTest {
         assertEquals(TRACEPARENT, propagator.extracted.get("traceparent"));
         assertEquals("vendor=value", propagator.extracted.get("tracestate"));
         assertFalse(scoped.get());
+
+        traceContext.runWithParent(
+                new OutboxTraceContext.Headers(NEXT_TRACEPARENT, "next=state"),
+                () -> assertTrue(scoped.get())
+        );
+
+        assertEquals(NEXT_TRACEPARENT, propagator.extracted.get("traceparent"));
+        assertEquals("next=state", propagator.extracted.get("tracestate"));
+        assertFalse(scoped.get());
+
+        traceContext.runWithParent(null, () -> assertFalse(scoped.get()));
+        verify(builder, org.mockito.Mockito.times(2)).start();
     }
 
     @Test

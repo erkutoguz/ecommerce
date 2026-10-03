@@ -15,7 +15,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CurrentCustomerResolverTest {
 
-    private static final UUID AUTH_USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     @Mock
@@ -28,10 +27,9 @@ class CurrentCustomerResolverTest {
     private CurrentCustomerResolver resolver;
 
     @Test
-    void customerId_shouldResolveCustomerIdFromDistinctAuthUserId() {
-        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
+    void customerId_shouldResolveCurrentAuthenticatedCustomerId() {
         when(currentUser.accessToken()).thenReturn("access-token");
-        when(customerClient.getByAuthUserId(AUTH_USER_ID, "access-token"))
+        when(customerClient.getCurrentCustomer("access-token"))
                 .thenReturn(new CustomerLookupResponse(CUSTOMER_ID, CustomerStatus.ACTIVE));
 
         assertEquals(CUSTOMER_ID, resolver.customerId());
@@ -39,9 +37,8 @@ class CurrentCustomerResolverTest {
 
     @Test
     void customerId_inactiveCustomer_shouldThrowInvalidCustomerStateException() {
-        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
         when(currentUser.accessToken()).thenReturn("access-token");
-        when(customerClient.getByAuthUserId(AUTH_USER_ID, "access-token"))
+        when(customerClient.getCurrentCustomer("access-token"))
                 .thenReturn(new CustomerLookupResponse(CUSTOMER_ID, CustomerStatus.INACTIVE));
 
         assertThrows(InvalidCustomerStateException.class, resolver::customerId);

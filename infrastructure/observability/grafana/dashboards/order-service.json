@@ -69,7 +69,7 @@
         { "expr": "sum(rate(checkout_accepted_total{job=\"order-service\"}[5m]))", "legendFormat": "accepted", "refId": "B" },
         { "expr": "sum(rate(checkout_failed_total{job=\"order-service\"}[5m]))", "legendFormat": "failed", "refId": "C" }
       ],
-      "title": "Checkout Outcomes",
+  "title": "Checkout Attempts and Synchronous Results",
       "type": "timeseries"
     },
     {

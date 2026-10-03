@@ -37,12 +37,12 @@ class InternalCustomerControllerTest {
     private CurrentUser currentUser;
 
     @Test
-    void knownAuthUserIdReturnsMinimalCustomerLookup() throws Exception {
+    void currentAuthenticatedUserReturnsMinimalCustomerLookup() throws Exception {
         when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
         when(customerService.getByAuthUserId(AUTH_USER_ID))
                 .thenReturn(new CustomerLookupResponse(CUSTOMER_ID, CustomerStatus.ACTIVE));
 
-        mockMvc.perform(get("/internal/by-auth-user/{authUserId}", AUTH_USER_ID))
+        mockMvc.perform(get("/internal/customer"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.customerId").value(CUSTOMER_ID.toString()))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
@@ -57,22 +57,10 @@ class InternalCustomerControllerTest {
     void unknownAuthUserIdReturnsNotFound() throws Exception {
         when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
         when(customerService.getByAuthUserId(AUTH_USER_ID))
-                .thenThrow(new CustomerNotFoundException("Customer not found with auth id: " + AUTH_USER_ID));
+                .thenThrow(new CustomerNotFoundException("Customer not found"));
 
-        mockMvc.perform(get("/internal/by-auth-user/{authUserId}", AUTH_USER_ID))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error").value("Customer not found with auth id: " + AUTH_USER_ID));
-    }
-
-    @Test
-    void differentAuthUserIdIsNotResolved() throws Exception {
-        UUID otherAuthUserId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
-        when(currentUser.authUserId()).thenReturn(AUTH_USER_ID);
-
-        mockMvc.perform(get("/internal/by-auth-user/{authUserId}", otherAuthUserId))
+        mockMvc.perform(get("/internal/customer"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Customer not found"));
-
-        org.mockito.Mockito.verifyNoInteractions(customerService);
     }
 }

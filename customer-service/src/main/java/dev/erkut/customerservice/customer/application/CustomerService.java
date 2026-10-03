@@ -52,7 +52,7 @@ public class CustomerService {
         Customer customer = Customer.create(command.authUserId(), command.email(), now);
 
         if(customerRepository.existsByEmail(customer.getEmail())) {
-            throw new CustomerEmailAlreadyExistsException("Customer already exists with email: " + customer.getEmail());
+            throw new CustomerEmailAlreadyExistsException("Customer already exists with email");
         }
 
         customerRepository.save(customer);
@@ -73,7 +73,7 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public CustomerLookupResponse getByAuthUserId(UUID authUserId) {
         Customer customer = customerRepository.findByAuthUserId(authUserId)
-                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with auth id: " + authUserId));
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
 
         return new CustomerLookupResponse(
                 customer.getId(),

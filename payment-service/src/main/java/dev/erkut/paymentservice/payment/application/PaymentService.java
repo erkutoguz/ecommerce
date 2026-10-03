@@ -99,7 +99,7 @@ public class PaymentService {
 
         Payment payment = paymentRepository.findByProviderPaymentId(providerPaymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(
-                        "Payment not found for provider payment id: " + providerPaymentId
+                        "Payment not found for provider session"
                 ));
 
         payment.markCompleted(occurredAt, now);
@@ -128,7 +128,7 @@ public class PaymentService {
 
         Payment payment = paymentRepository.findByProviderPaymentId(providerPaymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(
-                        "Payment not found for provider payment id: " + providerPaymentId
+                        "Payment not found for provider session"
                 ));
 
         if (payment.getStatus() == PaymentStatus.COMPLETED

@@ -78,6 +78,22 @@ class CustomerServiceTest {
     }
 
     @Test
+    void duplicateEmailErrorDoesNotIncludeEmail() {
+        MessageEnvelope envelope = envelope(MESSAGE_ID);
+        when(inboxService.tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
+                .thenReturn(true);
+        when(customerRepository.existsByEmail("ada@example.com")).thenReturn(true);
+
+        var exception = assertThrows(
+                dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException.class,
+                () -> customerService().handleCreateCustomerCommand(
+                        envelope, new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com")));
+
+        assertEquals("Customer already exists with email", exception.getMessage());
+        verify(customerRepository, never()).save(any(Customer.class));
+    }
+
+    @Test
     void duplicateMessageIdIsNoOp() {
         MessageEnvelope envelope = envelope(MESSAGE_ID);
         when(inboxService.tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
@@ -144,8 +160,9 @@ class CustomerServiceTest {
     void getByAuthUserIdThrowsWhenAuthUserIdIsUnknown() {
         when(customerRepository.findByAuthUserId(AUTH_USER_ID)).thenReturn(Optional.empty());
 
-        assertThrows(CustomerNotFoundException.class,
+        CustomerNotFoundException exception = assertThrows(CustomerNotFoundException.class,
                 () -> customerService().getByAuthUserId(AUTH_USER_ID));
+        assertEquals("Customer not found", exception.getMessage());
     }
 
     @Test
