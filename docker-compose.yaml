@@ -79,6 +79,7 @@ services:
       - --storage.tsdb.path=/prometheus
     depends_on:
       - order-service
+      - auth-service
       - payment-service
     networks:
       - app-network
@@ -106,6 +107,7 @@ services:
       - ./infrastructure/observability/grafana/workflow-dashboards:/var/lib/grafana/workflow-dashboards:ro
       - ./infrastructure/observability/grafana/stock-dashboards:/var/lib/grafana/stock-dashboards:ro
       - ./infrastructure/observability/grafana/payment-dashboards:/var/lib/grafana/payment-dashboards:ro
+      - ./infrastructure/observability/grafana/auth-dashboards:/var/lib/grafana/auth-dashboards:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     depends_on:
@@ -381,6 +383,7 @@ services:
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
     depends_on:
       auth-db:
         condition: service_healthy

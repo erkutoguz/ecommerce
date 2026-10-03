@@ -2,9 +2,11 @@ package dev.erkut.authservice.outbox.application;
 
 import dev.erkut.authservice.messaging.kafka.producer.KafkaMessagePublisher;
 import dev.erkut.authservice.messaging.kafka.routing.KafkaTopicResolver;
+import dev.erkut.authservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.authservice.outbox.domain.OutboxMessage;
 import dev.erkut.authservice.outbox.domain.OutboxMessageType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -19,6 +21,8 @@ import java.util.concurrent.CompletionException;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +42,20 @@ class OutboxRelayTest {
     @Mock
     private KafkaTopicResolver topicResolver;
 
+    @Mock
+    private OutboxTraceContext outboxTraceContext;
+
+    @BeforeEach
+    void executeRelayOperationWithinTraceContext() {
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return null;
+        }).when(outboxTraceContext).runWithParent(
+                nullable(OutboxTraceContext.Headers.class),
+                any(Runnable.class)
+        );
+    }
+
     @Test
     void successfulKafkaPublishMarksMessagePublished() {
         OutboxMessage message = message();
@@ -46,7 +64,7 @@ class OutboxRelayTest {
         when(messagePublisher.publish(eq("customer.commands"), eq(AUTH_USER_ID), any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
-        new OutboxRelay(outboxService, messagePublisher, topicResolver).relay();
+        new OutboxRelay(outboxService, messagePublisher, topicResolver, outboxTraceContext).relay();
 
         verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
     }
@@ -60,7 +78,7 @@ class OutboxRelayTest {
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("Kafka unavailable")));
 
         assertThrows(CompletionException.class,
-                () -> new OutboxRelay(outboxService, messagePublisher, topicResolver).relay());
+                () -> new OutboxRelay(outboxService, messagePublisher, topicResolver, outboxTraceContext).relay());
 
         verify(outboxService, never()).markPublished(any(), any());
     }

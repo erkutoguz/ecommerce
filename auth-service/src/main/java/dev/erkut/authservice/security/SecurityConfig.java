@@ -1,8 +1,10 @@
 package dev.erkut.authservice.security;
 
 import dev.erkut.authservice.user.JpaUserDetailsService;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -18,6 +20,15 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Bean
+    @Order(1)
+    public SecurityFilterChain actuatorSecurityFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .securityMatcher(EndpointRequest.to("health", "prometheus"))
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().permitAll())
+                .build();
+    }
+
+    @Bean
     public AuthenticationManager authenticationManager(
             JpaUserDetailsService userDetailsService,
             PasswordEncoder passwordEncoder
@@ -30,6 +41,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
