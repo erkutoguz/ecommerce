@@ -78,6 +78,7 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
     depends_on:
+      - api-gateway
       - order-service
       - auth-service
       - customer-service
@@ -112,6 +113,7 @@ services:
       - ./infrastructure/observability/grafana/auth-dashboards:/var/lib/grafana/auth-dashboards:ro
       - ./infrastructure/observability/grafana/customer-dashboards:/var/lib/grafana/customer-dashboards:ro
       - ./infrastructure/observability/grafana/product-dashboards:/var/lib/grafana/product-dashboards:ro
+      - ./infrastructure/observability/grafana/api-gateway-dashboards:/var/lib/grafana/api-gateway-dashboards:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     depends_on:
@@ -135,6 +137,7 @@ services:
       PAYMENT_SERVICE_URL: http://payment-service:4007
       AUTH_SERVICE_URL: http://auth-service:4008
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
     depends_on:
       - customer-service
       - order-service

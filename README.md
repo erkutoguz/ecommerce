@@ -214,7 +214,7 @@ docker compose up -d --build
 
 The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs `kafka-init`, and then starts Kafka-dependent services only after topic initialization succeeds.
 
-Order, Workflow, Stock, Payment, Auth, Customer, and Product observability foundations are in place. Product exposes internal Actuator health/Prometheus endpoints, exports traces to Tempo, and has a provisioned dashboard. Product → Stock Kafka trace continuation and Order → Product HTTP continuation are covered by runtime validation. Grafana is at `http://localhost:3000` and Prometheus at `http://localhost:9091`; all management ports remain internal to Compose. End-to-end tracing for remaining services is not complete.
+Order, Workflow, Stock, Payment, Auth, Customer, Product, and API Gateway observability foundations are in place. The Gateway exposes health/Prometheus only on internal port `9090`, exports traces to Tempo as `api-gateway`, and propagates W3C context through its HTTP proxy. Runtime validation confirmed Gateway → Product, Gateway → Auth → Customer, and authenticated Gateway → Order → Customer traces; requests without an incoming trace context start at the Gateway. Gateway has a provisioned operational dashboard. Grafana is at `http://localhost:3000` and Prometheus at `http://localhost:9091`; all management ports remain internal to Compose. Tracing across every service and path is not yet complete.
 
 Order Workflow Service continues propagated Order traces from Kafka and propagates context through its Outbox to downstream Kafka commands. Its Actuator endpoints remain internal at `order-workflow-service:9090`; Workflow metrics and a dedicated dashboard are provisioned in the shared Prometheus/Grafana stack.
 
