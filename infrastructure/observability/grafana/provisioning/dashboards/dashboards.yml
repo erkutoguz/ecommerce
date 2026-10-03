@@ -50,3 +50,13 @@ providers:
     options:
       path: /var/lib/grafana/auth-dashboards
       foldersFromFilesStructure: false
+
+  - name: Customer Service
+    orgId: 1
+    folder: Customer Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/customer-dashboards
+      foldersFromFilesStructure: false

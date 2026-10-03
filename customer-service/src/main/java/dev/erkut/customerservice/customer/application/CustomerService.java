@@ -37,16 +37,16 @@ public class CustomerService {
     }
 
     @Transactional
-    public void handleCreateCustomerCommand(MessageEnvelope envelope, CreateCustomerCommand command) {
+    public boolean handleCreateCustomerCommand(MessageEnvelope envelope, CreateCustomerCommand command) {
         validateCustomerCommand(envelope, command);
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, command.authUserId(), now)) {
-            return;
+            return false;
         }
 
         if (customerRepository.existsByAuthUserId(command.authUserId())) {
-            return;
+            return false;
         }
 
         Customer customer = Customer.create(command.authUserId(), command.email(), now);
@@ -56,6 +56,7 @@ public class CustomerService {
         }
 
         customerRepository.save(customer);
+        return true;
     }
 
     @Transactional(readOnly = true)

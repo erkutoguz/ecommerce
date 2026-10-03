@@ -214,7 +214,7 @@ docker compose up -d --build
 
 The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs `kafka-init`, and then starts Kafka-dependent services only after topic initialization succeeds.
 
-Order, Workflow, and Stock observability is in place. Payment has internal Actuator endpoints, Payment/Outbox metrics, Tempo tracing, Kafka observation, and a provisioned dashboard; full Stripe E2E tracing remains unclaimed because the local E2E stock precondition was already dirty. Auth now has internal Actuator endpoints, HTTP traces, a provisioned dashboard, and W3C propagation through its registration Outbox to `customer.commands`; Customer-side trace continuation remains future work. Grafana is at `http://localhost:3000` and Prometheus at `http://localhost:9091`; all management ports remain internal to Compose. Observability and end-to-end tracing for the remaining services are not complete.
+Order, Workflow, Stock, Payment, Auth, and Customer observability foundations are in place. Customer has internal Actuator endpoints, HTTP/Kafka tracing, a provisioning metric, and a provisioned dashboard. Runtime validation confirms Auth → Customer Kafka and Order → Customer HTTP trace continuation. Grafana is at `http://localhost:3000` and Prometheus at `http://localhost:9091`; all management ports remain internal to Compose. End-to-end tracing for remaining services is not complete.
 
 Order Workflow Service continues propagated Order traces from Kafka and propagates context through its Outbox to downstream Kafka commands. Its Actuator endpoints remain internal at `order-workflow-service:9090`; Workflow metrics and a dedicated dashboard are provisioned in the shared Prometheus/Grafana stack.
 

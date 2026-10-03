@@ -27,3 +27,8 @@ scrape_configs:
     static_configs:
       - targets:
           - auth-service:9090
+  - job_name: customer-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - customer-service:9090
