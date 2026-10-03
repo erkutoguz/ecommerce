@@ -4,6 +4,7 @@ import dev.erkut.paymentservice.message.MessageEnvelope;
 import dev.erkut.paymentservice.messaging.kafka.config.KafkaTopicsProperties;
 import dev.erkut.paymentservice.messaging.kafka.producer.KafkaMessagePublisher;
 import dev.erkut.paymentservice.messaging.kafka.routing.KafkaTopicResolver;
+import dev.erkut.paymentservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.paymentservice.outbox.domain.OutboxMessage;
 import dev.erkut.paymentservice.outbox.domain.OutboxMessageType;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,14 +39,23 @@ class OutboxRelayTest {
     @Mock
     private OutboxService outboxService;
 
+    @Mock
+    private OutboxTraceContext outboxTraceContext;
+
     @Test
     void relay_shouldPublishPaymentCompletedEventAndMarkItPublished() {
         JsonMapper jsonMapper = new JsonMapper();
+        OutboxTraceContext.Headers traceContext = new OutboxTraceContext.Headers(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                "vendor=value"
+        );
         OutboxMessage message = OutboxMessage.create(
                 ORDER_ID,
                 OutboxMessageType.PAYMENT_COMPLETED_EVENT,
                 jsonMapper.createObjectNode().put("orderId", ORDER_ID.toString()),
-                CREATED_AT
+                CREATED_AT,
+                traceContext.traceparent(),
+                traceContext.tracestate()
         );
         when(outboxService.findPendingMessages()).thenReturn(List.of(message));
         when(messagePublisher.publish(
@@ -53,6 +64,10 @@ class OutboxRelayTest {
                 any(MessageEnvelope.class)
         )).thenReturn(CompletableFuture.completedFuture((SendResult<String, Object>) null));
 
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(1).run();
+            return null;
+        }).when(outboxTraceContext).runWithParent(any(), any());
         OutboxRelay relay = new OutboxRelay(
                 messagePublisher,
                 new KafkaTopicResolver(new KafkaTopicsProperties(
@@ -60,7 +75,8 @@ class OutboxRelayTest {
                         "payment.events",
                         "payment.commands.DLT"
                 )),
-                outboxService
+                outboxService,
+                outboxTraceContext
         );
 
         relay.relay();
@@ -73,6 +89,7 @@ class OutboxRelayTest {
         assertEquals(CREATED_AT, envelope.occurredAt());
         assertEquals(message.getPayload(), envelope.payload());
         verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxTraceContext).runWithParent(eq(traceContext), any());
     }
 
     @Test
@@ -93,6 +110,10 @@ class OutboxRelayTest {
                 any(MessageEnvelope.class)
         )).thenReturn(CompletableFuture.completedFuture((SendResult<String, Object>) null));
 
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(1).run();
+            return null;
+        }).when(outboxTraceContext).runWithParent(any(), any());
         OutboxRelay relay = new OutboxRelay(
                 messagePublisher,
                 new KafkaTopicResolver(new KafkaTopicsProperties(
@@ -100,7 +121,8 @@ class OutboxRelayTest {
                         "payment.events",
                         "payment.commands.DLT"
                 )),
-                outboxService
+                outboxService,
+                outboxTraceContext
         );
 
         relay.relay();

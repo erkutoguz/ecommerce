@@ -62,13 +62,13 @@ public class PaymentService {
     }
 
     @Transactional
-    public void handleInitiatePaymentCommand(MessageEnvelope envelope, InitiatePaymentCommand command) {
+    public boolean handleInitiatePaymentCommand(MessageEnvelope envelope, InitiatePaymentCommand command) {
         validateInitiatePaymentCommand(envelope, command);
 
         Instant now = Instant.now();
 
         if(isDuplicate(envelope, command.orderId(), now)) {
-            return;
+            return false;
         }
 
         Currency currency = CurrencyMapper.from(command.currency());
@@ -79,10 +79,11 @@ public class PaymentService {
         payment.markAwaitingCustomerAction(session.providerPaymentId(), session.checkoutUrl(), now);
 
         paymentRepository.save(payment);
+        return true;
     }
 
     @Transactional
-    public void handlePaymentCompleted(
+    public boolean handlePaymentCompleted(
             String eventId,
             String eventType,
             String providerPaymentId,
@@ -93,12 +94,12 @@ public class PaymentService {
         Instant now = Instant.now();
 
         if (isWebhookDuplicate(eventId, eventType, providerPaymentId, now)) {
-            return;
+            return false;
         }
 
         Payment payment = paymentRepository.findByProviderPaymentId(providerPaymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(
-                        "Payment not found for provider payment id: " + providerPaymentId
+                        "Payment not found for provider session"
                 ));
 
         payment.markCompleted(occurredAt, now);
@@ -106,11 +107,12 @@ public class PaymentService {
                 new PaymentCompletedEvent(payment.getOrderId()),
                 now
         );
+        return true;
 
     }
 
     @Transactional
-    public void handleCheckoutSessionExpired(
+    public boolean handleCheckoutSessionExpired(
             String eventId,
             String eventType,
             String providerPaymentId,
@@ -121,17 +123,17 @@ public class PaymentService {
         Instant now = Instant.now();
 
         if (isWebhookDuplicate(eventId, eventType, providerPaymentId, now)) {
-            return;
+            return false;
         }
 
         Payment payment = paymentRepository.findByProviderPaymentId(providerPaymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(
-                        "Payment not found for provider payment id: " + providerPaymentId
+                        "Payment not found for provider session"
                 ));
 
         if (payment.getStatus() == PaymentStatus.COMPLETED
                 || payment.getStatus() == PaymentStatus.FAILED) {
-            return;
+            return false;
         }
 
         payment.markFailed(occurredAt, now);
@@ -142,6 +144,7 @@ public class PaymentService {
                 ),
                 now
         );
+        return true;
     }
 
     private void validatePaymentEvent(

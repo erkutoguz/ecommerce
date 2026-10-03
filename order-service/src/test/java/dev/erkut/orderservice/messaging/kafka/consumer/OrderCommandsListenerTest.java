@@ -7,6 +7,8 @@ import dev.erkut.orderservice.message.command.MarkOrderStockReservedCommand;
 import dev.erkut.orderservice.message.command.RejectOrderCommand;
 import dev.erkut.orderservice.order.application.OrderService;
 import dev.erkut.orderservice.order.domain.OrderRejectionReason;
+import dev.erkut.orderservice.observability.metric.OrderMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OrderCommandsListenerTest {
@@ -35,12 +38,18 @@ class OrderCommandsListenerTest {
     private OrderService orderService;
 
     private JsonMapper jsonMapper;
+    private SimpleMeterRegistry meterRegistry;
     private OrderCommandsListener listener;
 
     @BeforeEach
     void setUp() {
         jsonMapper = new JsonMapper();
-        listener = new OrderCommandsListener(new ConsumerUtil(jsonMapper), orderService);
+        meterRegistry = new SimpleMeterRegistry();
+        listener = new OrderCommandsListener(
+                new ConsumerUtil(jsonMapper),
+                orderService,
+                new OrderMetrics(meterRegistry)
+        );
     }
 
     @Test
@@ -53,6 +62,8 @@ class OrderCommandsListenerTest {
                 "REJECT_ORDER_COMMAND",
                 jsonMapper.valueToTree(expectedCommand)
         );
+        when(orderService.handleRejectOrderCommand(eq(envelope), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
         ArgumentCaptor<RejectOrderCommand> commandCaptor =
                 ArgumentCaptor.forClass(RejectOrderCommand.class);
 
@@ -60,6 +71,23 @@ class OrderCommandsListenerTest {
 
         verify(orderService).handleRejectOrderCommand(eq(envelope), commandCaptor.capture());
         assertEquals(expectedCommand, commandCaptor.getValue());
+        assertEquals(1.0, meterRegistry.counter(
+                "orders.rejected", "reason", "out_of_stock"
+        ).count());
+    }
+
+    @Test
+    void duplicateRejectOrderCommand_shouldNotIncrementRejectionMetric() {
+        RejectOrderCommand command = new RejectOrderCommand(ORDER_ID, OrderRejectionReason.OUT_OF_STOCK);
+        MessageEnvelope envelope = envelope("REJECT_ORDER_COMMAND", jsonMapper.valueToTree(command));
+        when(orderService.handleRejectOrderCommand(eq(envelope), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(false);
+
+        listener.listenOrderCommands(envelope);
+
+        assertEquals(0.0, meterRegistry.counter(
+                "orders.rejected", "reason", "out_of_stock"
+        ).count());
     }
 
     @Test

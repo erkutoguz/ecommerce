@@ -7,6 +7,7 @@ import dev.erkut.orderservice.integration.product.*;
 import dev.erkut.orderservice.order.domain.Currency;
 import dev.erkut.orderservice.order.domain.Order;
 import dev.erkut.orderservice.order.domain.OrderLineSnapshot;
+import dev.erkut.orderservice.observability.metric.OrderMetrics;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -17,18 +18,32 @@ public class CheckoutService {
     private final CartService cartService;
     private final ProductClient productClient;
     private final CheckoutTransactionalService transactionalService;
+    private final OrderMetrics orderMetrics;
 
     public CheckoutService(
             CartService cartService,
             ProductClient productClient,
-            CheckoutTransactionalService transactionalService
+            CheckoutTransactionalService transactionalService,
+            OrderMetrics orderMetrics
     ) {
         this.cartService = cartService;
         this.productClient = productClient;
         this.transactionalService = transactionalService;
+        this.orderMetrics = orderMetrics;
     }
 
     public Order checkout(UUID cartId, UUID customerId, Currency currency) {
+        orderMetrics.checkoutAttempted();
+
+        try {
+            return performCheckout(cartId, customerId, currency);
+        } catch (RuntimeException exception) {
+            orderMetrics.checkoutFailed();
+            throw exception;
+        }
+    }
+
+    private Order performCheckout(UUID cartId, UUID customerId, Currency currency) {
         if (cartId == null) {
             throw new IllegalArgumentException("Cart id cannot be null");
         }
@@ -50,7 +65,7 @@ public class CheckoutService {
         List<OrderLineSnapshot> snapshots =
                 createOrderLineSnapshots(cart, products);
 
-        return transactionalService.checkout(
+        Order order = transactionalService.checkout(
                 cart.getId(),
                 customerId,
                 cart.getVersion(),
@@ -58,6 +73,9 @@ public class CheckoutService {
                 snapshots,
                 Instant.now()
         );
+
+        orderMetrics.checkoutAccepted();
+        return order;
     }
 
     private List<ProductLookupResponse> getValidatedProducts(List<CartItem> cartItems) {

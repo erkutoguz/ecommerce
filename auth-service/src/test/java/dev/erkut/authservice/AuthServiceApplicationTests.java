@@ -159,7 +159,7 @@ class AuthServiceApplicationTests {
 
         MvcResult duplicate = performRegister("test@example.COM", REGISTER_PASSWORD)
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("User with email test@example.com already exists"))
+                .andExpect(jsonPath("$.error").value("User with email already exists"))
                 .andReturn();
 
         assertEquals(1, authUserRepository.count());

@@ -10,12 +10,14 @@ import dev.erkut.productservice.outbox.domain.OutboxMessage;
 import dev.erkut.productservice.outbox.domain.OutboxMessageType;
 import dev.erkut.productservice.outbox.domain.OutboxStatus;
 import dev.erkut.productservice.outbox.persistence.OutboxMessageRepository;
+import dev.erkut.productservice.observability.tracing.OutboxTraceContext;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -27,6 +29,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Transactional
@@ -52,6 +55,9 @@ class ProductPersistenceIntegrationTest {
     @Autowired
     private OutboxMessageRepository outboxMessageRepository;
 
+    @MockitoBean
+    private OutboxTraceContext outboxTraceContext;
+
     @Autowired
     private EntityManager entityManager;
 
@@ -72,6 +78,12 @@ class ProductPersistenceIntegrationTest {
 
     @Test
     void productCreationPersistsPendingOutboxWithStableIdentityAndPayload() throws Exception {
+        when(outboxTraceContext.capture()).thenReturn(
+                new OutboxTraceContext.Headers(
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                        "vendor=value"
+                )
+        );
         System.out.println(
                 "JSON MAPPER = " +
                         entityManagerFactory.getProperties()
@@ -94,6 +106,11 @@ class ProductPersistenceIntegrationTest {
         assertEquals(created.productId(), outbox.getAggregateId());
         assertEquals(OutboxMessageType.PRODUCT_CREATED_EVENT, outbox.getMessageType());
         assertEquals(OutboxStatus.PENDING, outbox.getStatus());
+        assertEquals(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                outbox.getTraceparent()
+        );
+        assertEquals("vendor=value", outbox.getTracestate());
         assertNotNull(outbox.getCreatedAt());
         assertEquals(created.productId(),
                 new tools.jackson.databind.json.JsonMapper()

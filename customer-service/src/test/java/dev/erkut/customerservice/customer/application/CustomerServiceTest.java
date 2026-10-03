@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,7 +65,7 @@ class CustomerServiceTest {
         when(customerRepository.existsByEmail("ada@example.com")).thenReturn(false);
         when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        customerService().handleCreateCustomerCommand(envelope, command);
+        assertTrue(customerService().handleCreateCustomerCommand(envelope, command));
 
         var captor = org.mockito.ArgumentCaptor.forClass(Customer.class);
         verify(customerRepository).save(captor.capture());
@@ -77,13 +78,29 @@ class CustomerServiceTest {
     }
 
     @Test
+    void duplicateEmailErrorDoesNotIncludeEmail() {
+        MessageEnvelope envelope = envelope(MESSAGE_ID);
+        when(inboxService.tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
+                .thenReturn(true);
+        when(customerRepository.existsByEmail("ada@example.com")).thenReturn(true);
+
+        var exception = assertThrows(
+                dev.erkut.customerservice.customer.domain.exception.CustomerEmailAlreadyExistsException.class,
+                () -> customerService().handleCreateCustomerCommand(
+                        envelope, new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com")));
+
+        assertEquals("Customer already exists with email", exception.getMessage());
+        verify(customerRepository, never()).save(any(Customer.class));
+    }
+
+    @Test
     void duplicateMessageIdIsNoOp() {
         MessageEnvelope envelope = envelope(MESSAGE_ID);
         when(inboxService.tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any()))
                 .thenReturn(false);
 
-        customerService().handleCreateCustomerCommand(
-                envelope, new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com"));
+        assertFalse(customerService().handleCreateCustomerCommand(
+                envelope, new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com")));
 
         verify(inboxService).tryRegister(eq(MESSAGE_ID), eq("CREATE_CUSTOMER_COMMAND"), eq(AUTH_USER_ID), any());
         verify(customerRepository, never()).existsByAuthUserId(any());
@@ -97,8 +114,8 @@ class CustomerServiceTest {
                 .thenReturn(true);
         when(customerRepository.existsByAuthUserId(AUTH_USER_ID)).thenReturn(true);
 
-        customerService().handleCreateCustomerCommand(
-                envelope(secondMessageId), new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com"));
+        assertFalse(customerService().handleCreateCustomerCommand(
+                envelope(secondMessageId), new CreateCustomerCommand(AUTH_USER_ID, "ada@example.com")));
 
         verify(customerRepository).existsByAuthUserId(AUTH_USER_ID);
         verify(customerRepository, never()).existsByEmail(any());
@@ -143,8 +160,9 @@ class CustomerServiceTest {
     void getByAuthUserIdThrowsWhenAuthUserIdIsUnknown() {
         when(customerRepository.findByAuthUserId(AUTH_USER_ID)).thenReturn(Optional.empty());
 
-        assertThrows(CustomerNotFoundException.class,
+        CustomerNotFoundException exception = assertThrows(CustomerNotFoundException.class,
                 () -> customerService().getByAuthUserId(AUTH_USER_ID));
+        assertEquals("Customer not found", exception.getMessage());
     }
 
     @Test

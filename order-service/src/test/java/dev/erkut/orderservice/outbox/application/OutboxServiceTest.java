@@ -8,6 +8,7 @@ import dev.erkut.orderservice.outbox.domain.OutboxMessageType;
 import dev.erkut.orderservice.outbox.domain.OutboxStatus;
 import dev.erkut.orderservice.outbox.domain.exception.InvalidOutboxMessageException;
 import dev.erkut.orderservice.outbox.persistence.OutboxMessageRepository;
+import dev.erkut.orderservice.observability.tracing.OutboxTraceContext;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -43,6 +44,9 @@ class OutboxServiceTest {
     @Mock
     private JsonMapper jsonMapper;
 
+    @Mock
+    private OutboxTraceContext outboxTraceContext;
+
     @InjectMocks
     private OutboxService outboxService;
 
@@ -61,6 +65,25 @@ class OutboxServiceTest {
         assertEquals(OutboxMessageType.ORDER_CHECKOUT_STARTED, saved.getMessageType());
         assertEquals(payload, saved.getPayload());
         assertEquals(OutboxStatus.PENDING, saved.getStatus());
+    }
+
+    @Test
+    void createOrderCheckoutStartedMessage_shouldPersistCapturedTraceContext() throws JacksonException {
+        OrderCheckoutStartedEvent event = event();
+        JsonNode payload = new JsonMapper().valueToTree(event);
+        when(jsonMapper.valueToTree(event)).thenReturn(payload);
+        when(outboxTraceContext.capture()).thenReturn(new OutboxTraceContext.Headers(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                "vendor=value"
+        ));
+        ArgumentCaptor<OutboxMessage> messageCaptor = ArgumentCaptor.forClass(OutboxMessage.class);
+
+        outboxService.createOrderCheckoutStartedMessage(event, CREATED_AT);
+
+        verify(outboxMessageRepository).save(messageCaptor.capture());
+        assertEquals("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                messageCaptor.getValue().getTraceparent());
+        assertEquals("vendor=value", messageCaptor.getValue().getTracestate());
     }
 
     @Test

@@ -6,6 +6,7 @@ import dev.erkut.authservice.outbox.domain.OutboxMessage;
 import dev.erkut.authservice.outbox.domain.OutboxMessageType;
 import dev.erkut.authservice.outbox.domain.OutboxStatus;
 import dev.erkut.authservice.outbox.persistence.OutboxMessageRepository;
+import dev.erkut.authservice.observability.tracing.OutboxTraceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -21,10 +22,16 @@ public class OutboxService {
 
     private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
+    private final OutboxTraceContext outboxTraceContext;
 
-    public OutboxService(OutboxMessageRepository outboxRepository, JsonMapper jsonMapper) {
+    public OutboxService(
+            OutboxMessageRepository outboxRepository,
+            JsonMapper jsonMapper,
+            OutboxTraceContext outboxTraceContext
+    ) {
         this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Transactional
@@ -34,11 +41,14 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(command);
+        OutboxTraceContext.Headers traceContext = outboxTraceContext.capture();
         OutboxMessage message = OutboxMessage.create(
                 command.authUserId(),
                 OutboxMessageType.CREATE_CUSTOMER_COMMAND,
                 payload,
-                createdAt
+                createdAt,
+                traceContext == null ? null : traceContext.traceparent(),
+                traceContext == null ? null : traceContext.tracestate()
         );
 
         outboxRepository.save(message);

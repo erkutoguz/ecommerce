@@ -26,7 +26,6 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class CustomerClientTest {
 
     private static final String CUSTOMER_SERVICE_BASE_URL = "http://customer-service.test";
-    private static final UUID AUTH_USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID CUSTOMER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final String ACCESS_TOKEN = "access-token";
 
@@ -56,7 +55,7 @@ class CustomerClientTest {
                         "{\"customerId\":\"" + CUSTOMER_ID + "\",\"status\":\"ACTIVE\"}",
                         MediaType.APPLICATION_JSON));
 
-        CustomerLookupResponse response = customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN);
+        CustomerLookupResponse response = customerClient.getCurrentCustomer(ACCESS_TOKEN);
 
         assertEquals(CUSTOMER_ID, response.customerId());
         assertEquals(CustomerStatus.ACTIVE, response.status());
@@ -69,9 +68,9 @@ class CustomerClientTest {
 
         CustomerNotFoundException exception = assertThrows(
                 CustomerNotFoundException.class,
-                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
+                () -> customerClient.getCurrentCustomer(ACCESS_TOKEN));
 
-        assertEquals("Customer not found for auth user: " + AUTH_USER_ID, exception.getMessage());
+        assertEquals("Customer not found", exception.getMessage());
     }
 
     @ParameterizedTest
@@ -82,7 +81,7 @@ class CustomerClientTest {
 
         CustomerServiceUnavailableException exception = assertThrows(
                 CustomerServiceUnavailableException.class,
-                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
+                () -> customerClient.getCurrentCustomer(ACCESS_TOKEN));
 
         assertEquals("Customer service unavailable", exception.getMessage());
     }
@@ -94,7 +93,7 @@ class CustomerClientTest {
 
         CustomerServiceUnavailableException exception = assertThrows(
                 CustomerServiceUnavailableException.class,
-                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
+                () -> customerClient.getCurrentCustomer(ACCESS_TOKEN));
 
         assertEquals("Customer service unavailable", exception.getMessage());
         assertInstanceOf(ResourceAccessException.class, exception.getCause());
@@ -108,12 +107,12 @@ class CustomerClientTest {
 
         CustomerServiceUnavailableException exception = assertThrows(
                 CustomerServiceUnavailableException.class,
-                () -> customerClient.getByAuthUserId(AUTH_USER_ID, ACCESS_TOKEN));
+                () -> customerClient.getCurrentCustomer(ACCESS_TOKEN));
 
         assertEquals("Customer service returned unexpected status: 400", exception.getMessage());
     }
 
     private static String internalCustomerUrl() {
-        return CUSTOMER_SERVICE_BASE_URL + "/internal/by-auth-user/" + AUTH_USER_ID;
+        return CUSTOMER_SERVICE_BASE_URL + "/internal/customer";
     }
 }

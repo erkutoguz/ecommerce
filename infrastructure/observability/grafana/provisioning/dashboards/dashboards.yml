@@ -1,0 +1,82 @@
+apiVersion: 1
+
+providers:
+  - name: API Gateway
+    orgId: 1
+    folder: API Gateway
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/api-gateway-dashboards
+      foldersFromFilesStructure: false
+
+  - name: Order Service
+    orgId: 1
+    folder: Order Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
+
+  - name: Workflow Service
+    orgId: 1
+    folder: Workflow Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/workflow-dashboards
+      foldersFromFilesStructure: false
+
+  - name: Stock Service
+    orgId: 1
+    folder: Stock Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/stock-dashboards
+      foldersFromFilesStructure: false
+
+  - name: Payment Service
+    orgId: 1
+    folder: Payment Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/payment-dashboards
+      foldersFromFilesStructure: false
+
+  - name: Auth Service
+    orgId: 1
+    folder: Auth Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/auth-dashboards
+      foldersFromFilesStructure: false
+
+  - name: Customer Service
+    orgId: 1
+    folder: Customer Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/customer-dashboards
+      foldersFromFilesStructure: false
+
+  - name: Product Service
+    orgId: 1
+    folder: Product Service
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/product-dashboards
+      foldersFromFilesStructure: false

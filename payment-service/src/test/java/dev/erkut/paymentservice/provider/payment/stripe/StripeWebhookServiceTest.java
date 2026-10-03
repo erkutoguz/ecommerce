@@ -2,6 +2,7 @@ package dev.erkut.paymentservice.provider.payment.stripe;
 
 import com.stripe.net.Webhook;
 import dev.erkut.paymentservice.payment.application.PaymentService;
+import dev.erkut.paymentservice.observability.metric.PaymentMetrics;
 import dev.erkut.paymentservice.provider.payment.stripe.config.StripeProperties;
 import dev.erkut.paymentservice.provider.payment.stripe.exception.StripeWebhookException;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class StripeWebhookServiceTest {
@@ -24,6 +26,9 @@ class StripeWebhookServiceTest {
 
     @Mock
     private PaymentService paymentService;
+
+    @Mock
+    private PaymentMetrics paymentMetrics;
 
     private StripeWebhookService webhookService;
 
@@ -37,7 +42,8 @@ class StripeWebhookServiceTest {
                         "http://localhost/cancel",
                         30
                 ),
-                paymentService
+                paymentService,
+                paymentMetrics
         );
     }
 
@@ -45,6 +51,12 @@ class StripeWebhookServiceTest {
     void handle_shouldVerifyAndDelegatePaidCheckoutSession() throws Exception {
         String payload = payload(EVENT_TYPE, "paid");
         long eventCreatedAt = 1_700_000_000L;
+        when(paymentService.handlePaymentCompleted(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(Instant.class)
+        )).thenReturn(true);
 
         webhookService.handle(
                 payload,
@@ -61,6 +73,7 @@ class StripeWebhookServiceTest {
                 "cs_test_123",
                 Instant.ofEpochSecond(eventCreatedAt)
         );
+        verify(paymentMetrics).paymentCompleted();
     }
 
     @Test
@@ -85,6 +98,35 @@ class StripeWebhookServiceTest {
     }
 
     @Test
+    void handle_shouldDeserializeCheckoutSessionFromOlderStripeApiVersion() throws Exception {
+        String eventType = "checkout.session.expired";
+        String payload = payload(eventType, "unpaid", "2025-01-27.acacia");
+        when(paymentService.handleCheckoutSessionExpired(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(Instant.class)
+        )).thenReturn(true);
+
+        webhookService.handle(
+                payload,
+                Webhook.Signature.generateSignatureHeader(
+                        payload,
+                        WEBHOOK_SECRET,
+                        Instant.now().getEpochSecond()
+                )
+        );
+
+        verify(paymentService).handleCheckoutSessionExpired(
+                "evt_test_123",
+                eventType,
+                "cs_test_123",
+                Instant.ofEpochSecond(1_700_000_000L)
+        );
+        verify(paymentMetrics).paymentExpired();
+    }
+
+    @Test
     void handle_shouldRejectInvalidSignature() {
         assertThrows(
                 StripeWebhookException.class,
@@ -93,11 +135,15 @@ class StripeWebhookServiceTest {
     }
 
     private static String payload(String eventType, String paymentStatus) {
+        return payload(eventType, paymentStatus, "2026-08-26.dahlia");
+    }
+
+    private static String payload(String eventType, String paymentStatus, String apiVersion) {
         return """
                 {
                   "id": "evt_test_123",
                   "object": "event",
-                  "api_version": "2026-08-26.dahlia",
+                  "api_version": "%s",
                   "created": 1700000000,
                   "type": "%s",
                   "data": {
@@ -108,6 +154,6 @@ class StripeWebhookServiceTest {
                     }
                   }
                 }
-                """.formatted(eventType, paymentStatus);
+                """.formatted(apiVersion, eventType, paymentStatus);
     }
 }

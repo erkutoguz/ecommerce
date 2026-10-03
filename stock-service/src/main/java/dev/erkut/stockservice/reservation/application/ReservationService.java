@@ -44,13 +44,13 @@ public class ReservationService {
     }
 
     @Transactional
-    public void handleReserveStock(MessageEnvelope envelope, ReserveStockCommand command) {
+    public ReservationProcessingOutcome handleReserveStock(MessageEnvelope envelope, ReserveStockCommand command) {
         validateCommand(command);
 
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, command.orderId(), now)) {
-            return;
+            return ReservationProcessingOutcome.DUPLICATE;
         }
 
         List<StockItem> stockItems = new ArrayList<>();
@@ -67,7 +67,7 @@ public class ReservationService {
                             requestedItem.productId()
                     );
                     outboxService.createStockReservationFailedEvent(event, now);
-                    return;
+                    return ReservationProcessingOutcome.FAILED_ITEM_NOT_FOUND;
                 }
 
                 StockItem stockItem = stockItemOpt.get();
@@ -81,7 +81,7 @@ public class ReservationService {
                     ex.getProductId()
             );
             outboxService.createStockReservationFailedEvent(event, now);
-            return;
+            return ReservationProcessingOutcome.FAILED_INSUFFICIENT_STOCK;
         } catch (InactiveStockItemException ex) {
             StockReservationFailedEvent event = new StockReservationFailedEvent(
                     command.orderId(),
@@ -89,7 +89,7 @@ public class ReservationService {
                     ex.getProductId()
             );
             outboxService.createStockReservationFailedEvent(event, now);
-            return;
+            return ReservationProcessingOutcome.FAILED_ITEM_INACTIVE;
         }
 
         for (int i = 0; i < command.items().size(); i++) {
@@ -107,10 +107,14 @@ public class ReservationService {
         reservationRepository.save(reservation);
         StockReservedEvent event = new StockReservedEvent(command.orderId(), now);
         outboxService.createStockReservedEvent(event, now);
+        return ReservationProcessingOutcome.RESERVED;
     }
 
     @Transactional
-    public void handleConfirmStockReservationCommand(MessageEnvelope envelope, ConfirmStockReservationCommand command) {
+    public ReservationProcessingOutcome handleConfirmStockReservationCommand(
+            MessageEnvelope envelope,
+            ConfirmStockReservationCommand command
+    ) {
         if(command == null) {
             throw new IllegalArgumentException("Confirm stock reservation command cannot be null");
         }
@@ -122,7 +126,7 @@ public class ReservationService {
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, command.orderId(), now)) {
-            return;
+            return ReservationProcessingOutcome.DUPLICATE;
         }
 
         Reservation reservation = reservationRepository.findById(command.orderId())
@@ -136,10 +140,14 @@ public class ReservationService {
 
         StockReservationConfirmedEvent event = new StockReservationConfirmedEvent(command.orderId());
         outboxService.createStockReservationConfirmedEvent(event, now);
+        return ReservationProcessingOutcome.CONFIRMED;
     }
 
     @Transactional
-    public void handleReleaseStockReservationCommand(MessageEnvelope envelope, ReleaseStockReservationCommand command) {
+    public ReservationProcessingOutcome handleReleaseStockReservationCommand(
+            MessageEnvelope envelope,
+            ReleaseStockReservationCommand command
+    ) {
         if(command == null) {
             throw new IllegalArgumentException("Release stock reservation command cannot be null");
         }
@@ -151,7 +159,7 @@ public class ReservationService {
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, command.orderId(), now)) {
-            return;
+            return ReservationProcessingOutcome.DUPLICATE;
         }
 
         Reservation reservation = reservationRepository.findById(command.orderId())
@@ -164,6 +172,7 @@ public class ReservationService {
         reservation.releaseStock();
         StockReservationReleasedEvent event = new StockReservationReleasedEvent(command.orderId());
         outboxService.createStockReservationReleasedEvent(event, now);
+        return ReservationProcessingOutcome.RELEASED;
     }
 
     private boolean isDuplicate(

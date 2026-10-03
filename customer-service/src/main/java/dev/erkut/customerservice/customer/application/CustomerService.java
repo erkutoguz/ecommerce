@@ -37,25 +37,26 @@ public class CustomerService {
     }
 
     @Transactional
-    public void handleCreateCustomerCommand(MessageEnvelope envelope, CreateCustomerCommand command) {
+    public boolean handleCreateCustomerCommand(MessageEnvelope envelope, CreateCustomerCommand command) {
         validateCustomerCommand(envelope, command);
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, command.authUserId(), now)) {
-            return;
+            return false;
         }
 
         if (customerRepository.existsByAuthUserId(command.authUserId())) {
-            return;
+            return false;
         }
 
         Customer customer = Customer.create(command.authUserId(), command.email(), now);
 
         if(customerRepository.existsByEmail(customer.getEmail())) {
-            throw new CustomerEmailAlreadyExistsException("Customer already exists with email: " + customer.getEmail());
+            throw new CustomerEmailAlreadyExistsException("Customer already exists with email");
         }
 
         customerRepository.save(customer);
+        return true;
     }
 
     @Transactional(readOnly = true)
@@ -72,7 +73,7 @@ public class CustomerService {
     @Transactional(readOnly = true)
     public CustomerLookupResponse getByAuthUserId(UUID authUserId) {
         Customer customer = customerRepository.findByAuthUserId(authUserId)
-                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with auth id: " + authUserId));
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found"));
 
         return new CustomerLookupResponse(
                 customer.getId(),

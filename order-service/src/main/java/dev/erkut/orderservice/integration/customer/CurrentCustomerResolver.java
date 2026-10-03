@@ -20,10 +20,8 @@ public class CurrentCustomerResolver {
     }
 
     public CustomerLookupResponse resolve() {
-        UUID authUserId = currentUser.authUserId();
-
         CustomerLookupResponse customer =
-                customerClient.getByAuthUserId(authUserId, currentUser.accessToken());
+                customerClient.getCurrentCustomer(currentUser.accessToken());
 
         if (customer.status() != CustomerStatus.ACTIVE) {
             throw new InvalidCustomerStateException("Customer is not active");

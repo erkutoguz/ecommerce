@@ -1,11 +1,13 @@
 package dev.erkut.paymentservice.provider.payment.stripe;
 
+import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import dev.erkut.paymentservice.payment.application.PaymentService;
+import dev.erkut.paymentservice.observability.metric.PaymentMetrics;
 import dev.erkut.paymentservice.provider.payment.stripe.config.StripeProperties;
 import dev.erkut.paymentservice.provider.payment.stripe.exception.StripeWebhookException;
 import org.springframework.stereotype.Service;
@@ -22,13 +24,16 @@ public class StripeWebhookService {
 
     private final StripeProperties properties;
     private final PaymentService paymentService;
+    private final PaymentMetrics paymentMetrics;
 
     public StripeWebhookService(
             StripeProperties properties,
-            PaymentService paymentService
+            PaymentService paymentService,
+            PaymentMetrics paymentMetrics
     ) {
         this.properties = properties;
         this.paymentService = paymentService;
+        this.paymentMetrics = paymentMetrics;
     }
 
     public void handle(String payload, String signature) {
@@ -45,28 +50,22 @@ public class StripeWebhookService {
     }
 
     private void handleCheckoutSessionExpired(Event event) {
-        StripeObject stripeObject = event
-                .getDataObjectDeserializer()
-                .getObject()
-                .orElseThrow(() ->
-                        new StripeWebhookException("Stripe checkout session could not be deserialized")
-                );
-
-        if (!(stripeObject instanceof Session session)) {
-            throw new StripeWebhookException("Stripe event does not contain a checkout session");
-        }
+        Session session = checkoutSession(event);
 
         String providerPaymentId = session.getId();
         if (providerPaymentId == null || providerPaymentId.isBlank()) {
             throw new StripeWebhookException("Stripe checkout session id cannot be blank");
         }
 
-        paymentService.handleCheckoutSessionExpired(
+        boolean newlyExpired = paymentService.handleCheckoutSessionExpired(
                 event.getId(),
                 event.getType(),
                 providerPaymentId,
                 Instant.ofEpochSecond(event.getCreated())
         );
+        if (newlyExpired) {
+            paymentMetrics.paymentExpired();
+        }
     }
 
     private Event verifyAndConstructEvent(
@@ -101,16 +100,7 @@ public class StripeWebhookService {
     }
 
     private void handleCheckoutSessionCompleted(Event event) {
-        StripeObject stripeObject = event
-                .getDataObjectDeserializer()
-                .getObject()
-                .orElseThrow(() ->
-                        new StripeWebhookException("Stripe checkout session could not be deserialized")
-                );
-
-        if (!(stripeObject instanceof Session session)) {
-            throw new StripeWebhookException("Stripe event does not contain a checkout session");
-        }
+        Session session = checkoutSession(event);
 
         if (!"paid".equals(session.getPaymentStatus())) {
             return;
@@ -122,11 +112,33 @@ public class StripeWebhookService {
             throw new StripeWebhookException("Stripe checkout session id cannot be blank");
         }
 
-        paymentService.handlePaymentCompleted(
+        boolean newlyCompleted = paymentService.handlePaymentCompleted(
                 event.getId(),
                 event.getType(),
                 providerPaymentId,
                 Instant.ofEpochSecond(event.getCreated())
         );
+        if (newlyCompleted) {
+            paymentMetrics.paymentCompleted();
+        }
+    }
+
+    private Session checkoutSession(Event event) {
+        var deserializer = event.getDataObjectDeserializer();
+        StripeObject stripeObject = deserializer.getObject().orElseGet(() -> {
+            try {
+                return deserializer.deserializeUnsafe();
+            } catch (EventDataObjectDeserializationException exception) {
+                throw new StripeWebhookException(
+                        "Stripe checkout session could not be deserialized",
+                        exception
+                );
+            }
+        });
+
+        if (!(stripeObject instanceof Session session)) {
+            throw new StripeWebhookException("Stripe event does not contain a checkout session");
+        }
+        return session;
     }
 }

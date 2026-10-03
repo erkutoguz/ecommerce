@@ -47,7 +47,7 @@ public class OrderSagaService {
     }
 
     @Transactional
-    public void handleOrderCheckoutStarted(
+    public boolean handleOrderCheckoutStarted(
             MessageEnvelope envelope,
             OrderCheckoutStartedEvent event) {
 
@@ -63,7 +63,7 @@ public class OrderSagaService {
         Instant now = Instant.now();
 
         if (isDuplicate(envelope, event.orderId(), now)) {
-            return;
+            return false;
         }
 
         OrderSaga orderSaga = OrderSaga.start(
@@ -83,6 +83,7 @@ public class OrderSagaService {
 
         orderSagaRepository.save(orderSaga);
         outboxService.createReserveStockCommand(command, now);
+        return true;
     }
 
     private void validateCheckoutItems(OrderCheckoutStartedEvent event) {
@@ -158,19 +159,20 @@ public class OrderSagaService {
     }
 
     @Transactional
-    public void handleOrderRejectedEvent(MessageEnvelope envelope, OrderRejectedEvent event) {
+    public boolean handleOrderRejectedEvent(MessageEnvelope envelope, OrderRejectedEvent event) {
         validateOrderEvent(envelope, event);
 
         Instant now = Instant.now();
 
         if(isDuplicate(envelope, event.orderId(), now)) {
-            return;
+            return false;
         }
 
         OrderSaga orderSaga = orderSagaRepository.findById(event.orderId())
                 .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
 
         orderSaga.markFailed(now);
+        return true;
     }
 
     @Transactional
@@ -239,18 +241,19 @@ public class OrderSagaService {
     }
 
     @Transactional
-    public void handleOrderConfirmedEvent(MessageEnvelope envelope, OrderConfirmedEvent event) {
+    public boolean handleOrderConfirmedEvent(MessageEnvelope envelope, OrderConfirmedEvent event) {
         validateOrderEvent(envelope, event);
         Instant now = Instant.now();
 
         if(isDuplicate(envelope, event.orderId(), now)) {
-            return;
+            return false;
         }
 
         OrderSaga orderSaga = orderSagaRepository.findById(event.orderId())
                 .orElseThrow(() -> new OrderSagaNotFoundException("Order saga is not found with id: " + event.orderId()));
 
         orderSaga.markCompleted(now);
+        return true;
     }
 
     @Transactional

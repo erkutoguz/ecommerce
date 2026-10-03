@@ -4,6 +4,7 @@ import dev.erkut.authservice.message.MessageEnvelope;
 import dev.erkut.authservice.messaging.kafka.producer.KafkaMessagePublisher;
 import dev.erkut.authservice.messaging.kafka.routing.KafkaTopicResolver;
 import dev.erkut.authservice.outbox.domain.OutboxMessage;
+import dev.erkut.authservice.observability.tracing.OutboxTraceContext;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -18,15 +19,18 @@ public class OutboxRelay {
     private final OutboxService outboxService;
     private final KafkaMessagePublisher messagePublisher;
     private final KafkaTopicResolver kafkaTopicResolver;
+    private final OutboxTraceContext outboxTraceContext;
 
     public OutboxRelay(
             OutboxService outboxService,
             KafkaMessagePublisher messagePublisher,
-            KafkaTopicResolver kafkaTopicResolver
+            KafkaTopicResolver kafkaTopicResolver,
+            OutboxTraceContext outboxTraceContext
     ) {
         this.outboxService = outboxService;
         this.messagePublisher = messagePublisher;
         this.kafkaTopicResolver = kafkaTopicResolver;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Scheduled(fixedDelayString = "${outbox.relay.fixed-delay-ms:2000}")
@@ -39,6 +43,13 @@ public class OutboxRelay {
     }
 
     private void publish(OutboxMessage message) {
+        OutboxTraceContext.Headers traceContext = message.getTraceparent() == null
+                ? null
+                : new OutboxTraceContext.Headers(message.getTraceparent(), message.getTracestate());
+        outboxTraceContext.runWithParent(traceContext, () -> publishWithCurrentContext(message));
+    }
+
+    private void publishWithCurrentContext(OutboxMessage message) {
         MessageEnvelope envelope = new MessageEnvelope(
                 message.getId(),
                 message.getMessageType().name(),

@@ -1,6 +1,5 @@
 package dev.erkut.orderservice.integration.customer;
 
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -17,17 +16,17 @@ public class CustomerClient {
         this.client = clientBuilder.baseUrl(customerBaseUrl).build();
     }
 
-    public CustomerLookupResponse getByAuthUserId(UUID authUserId, String accessToken) {
+    public CustomerLookupResponse getCurrentCustomer(String accessToken) {
         try {
             return this.client.get()
-                    .uri("/internal/by-auth-user/{authUserId}", authUserId)
+                    .uri("/internal/customer")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                     .retrieve()
                     .onStatus(
                             status -> status.value() == 404,
                             (req, res) -> {
                                 throw new CustomerNotFoundException(
-                                        "Customer not found for auth user: " + authUserId
+                                        "Customer not found"
                                 );
                             })
                     .onStatus(HttpStatusCode::is4xxClientError,

@@ -4,6 +4,7 @@ import dev.erkut.stockservice.message.event.StockReservationConfirmedEvent;
 import dev.erkut.stockservice.message.event.StockReservationFailedEvent;
 import dev.erkut.stockservice.message.event.StockReservationReleasedEvent;
 import dev.erkut.stockservice.message.event.StockReservedEvent;
+import dev.erkut.stockservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.stockservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.stockservice.outbox.domain.OutboxMessage;
 import dev.erkut.stockservice.outbox.domain.OutboxMessageType;
@@ -24,12 +25,15 @@ public class OutboxService {
 
     private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
+    private final OutboxTraceContext outboxTraceContext;
     public OutboxService(
             OutboxMessageRepository outboxRepository,
-            JsonMapper jsonMapper
+            JsonMapper jsonMapper,
+            OutboxTraceContext outboxTraceContext
     ) {
         this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Transactional
@@ -39,7 +43,7 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(event);
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.STOCK_RESERVED_EVENT,
                 payload,
@@ -60,7 +64,7 @@ public class OutboxService {
 
         JsonNode payload = serialize(event);
 
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.STOCK_RESERVATION_FAILED_EVENT,
                 payload,
@@ -81,7 +85,7 @@ public class OutboxService {
 
         JsonNode payload = serialize(event);
 
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT,
                 payload,
@@ -99,7 +103,7 @@ public class OutboxService {
 
         JsonNode payload = serialize(event);
 
-        OutboxMessage message = OutboxMessage.create(
+        OutboxMessage message = createMessage(
                 event.orderId(),
                 OutboxMessageType.STOCK_RESERVATION_RELEASED_EVENT,
                 payload,
@@ -132,5 +136,22 @@ public class OutboxService {
         } catch (JacksonException exception) {
             throw new OutboxSerializationException("payload could not be serialized", exception);
         }
+    }
+
+    private OutboxMessage createMessage(
+            UUID aggregateId,
+            OutboxMessageType messageType,
+            JsonNode payload,
+            Instant createdAt
+    ) {
+        OutboxTraceContext.Headers headers = outboxTraceContext.capture();
+        return OutboxMessage.create(
+                aggregateId,
+                messageType,
+                payload,
+                createdAt,
+                headers == null ? null : headers.traceparent(),
+                headers == null ? null : headers.tracestate()
+        );
     }
 }

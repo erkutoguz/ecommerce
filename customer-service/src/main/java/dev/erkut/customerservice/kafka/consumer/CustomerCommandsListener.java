@@ -4,6 +4,7 @@ import dev.erkut.customerservice.customer.application.CustomerService;
 import dev.erkut.customerservice.message.MessageEnvelope;
 import dev.erkut.customerservice.message.command.CreateCustomerCommand;
 import dev.erkut.customerservice.message.command.CustomerCommandType;
+import dev.erkut.customerservice.observability.metric.CustomerMetrics;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -12,13 +13,16 @@ public class CustomerCommandsListener {
 
     private final ConsumerUtil consumerUtil;
     private final CustomerService customerService;
+    private final CustomerMetrics customerMetrics;
 
     public CustomerCommandsListener(
             ConsumerUtil consumerUtil,
-            CustomerService customerService
+            CustomerService customerService,
+            CustomerMetrics customerMetrics
     ) {
         this.consumerUtil = consumerUtil;
         this.customerService = customerService;
+        this.customerMetrics = customerMetrics;
     }
 
     @KafkaListener(
@@ -36,10 +40,13 @@ public class CustomerCommandsListener {
         switch (commandType) {
             case CREATE_CUSTOMER_COMMAND -> {
                 CreateCustomerCommand command = consumerUtil.deserialize(envelope.payload(), CreateCustomerCommand.class);
-                customerService.handleCreateCustomerCommand(
+                boolean provisioned = customerService.handleCreateCustomerCommand(
                         envelope,
                         command
                 );
+                if (provisioned) {
+                    customerMetrics.provisioningCompleted();
+                }
             }
         }
     }
