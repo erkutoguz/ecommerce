@@ -4,9 +4,12 @@ import dev.erkut.productservice.message.MessageEnvelope;
 import dev.erkut.productservice.messaging.kafka.config.KafkaTopicsProperties;
 import dev.erkut.productservice.messaging.kafka.producer.KafkaMessagePublisher;
 import dev.erkut.productservice.messaging.kafka.routing.KafkaTopicResolver;
+import dev.erkut.productservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.productservice.outbox.domain.OutboxMessage;
 import dev.erkut.productservice.outbox.domain.OutboxMessageType;
 import dev.erkut.productservice.outbox.domain.OutboxStatus;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -26,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -91,7 +95,8 @@ class OutboxRelayTest {
         return new OutboxRelay(
                 outboxService,
                 publisher,
-                new KafkaTopicResolver(new KafkaTopicsProperties(TOPIC))
+                new KafkaTopicResolver(new KafkaTopicsProperties(TOPIC)),
+                new OutboxTraceContext(mock(Tracer.class), mock(Propagator.class))
         );
     }
 }

@@ -2,6 +2,7 @@ package dev.erkut.productservice.outbox.application;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
 import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.productservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.productservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.productservice.outbox.domain.OutboxMessage;
 import dev.erkut.productservice.outbox.domain.OutboxMessageType;
@@ -22,9 +23,15 @@ public class OutboxService {
 
     private final OutboxMessageRepository outboxRepository;
     private final JsonMapper jsonMapper;
-    public OutboxService(OutboxMessageRepository outboxRepository, JsonMapper jsonMapper) {
+    private final OutboxTraceContext outboxTraceContext;
+    public OutboxService(
+            OutboxMessageRepository outboxRepository,
+            JsonMapper jsonMapper,
+            OutboxTraceContext outboxTraceContext
+    ) {
         this.outboxRepository = outboxRepository;
         this.jsonMapper = jsonMapper;
+        this.outboxTraceContext = outboxTraceContext;
     }
 
     @Transactional
@@ -34,11 +41,14 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(event);
+        OutboxTraceContext.Headers traceContext = outboxTraceContext.capture();
         OutboxMessage message = OutboxMessage.create(
                 event.productId(),
                 OutboxMessageType.PRODUCT_CREATED_EVENT,
                 payload,
-                createdAt
+                createdAt,
+                traceContext == null ? null : traceContext.traceparent(),
+                traceContext == null ? null : traceContext.tracestate()
         );
 
         outboxRepository.save(message);
@@ -51,11 +61,14 @@ public class OutboxService {
         }
 
         JsonNode payload = serialize(event);
+        OutboxTraceContext.Headers traceContext = outboxTraceContext.capture();
         OutboxMessage message = OutboxMessage.create(
                 event.productId(),
                 OutboxMessageType.PRODUCT_DEACTIVATED_EVENT,
                 payload,
-                deactivatedAt
+                deactivatedAt,
+                traceContext == null ? null : traceContext.traceparent(),
+                traceContext == null ? null : traceContext.tracestate()
         );
 
         outboxRepository.save(message);
