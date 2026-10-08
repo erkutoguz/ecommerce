@@ -214,11 +214,11 @@ docker compose up -d --build
 
 The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs `kafka-init`, and then starts Kafka-dependent services only after topic initialization succeeds.
 
-The current eight-service architecture has shared Prometheus, Tempo, and Grafana observability. All application scrape targets were UP together in the final runtime audit. Gateway-rooted traces were verified through Auth → Customer, Product → Stock, Order → Workflow → Stock, and payment initiation; a signed Stripe expiry callback started a separate Gateway-rooted trace through Payment, Workflow, Stock, and Order. The Gateway exposes health/Prometheus only on internal port `9090` and propagates W3C context through its HTTP proxy. Grafana is at `http://localhost:3000` and Prometheus at `http://localhost:9091`; management ports remain internal to Compose.
+### Observability
 
-Order Workflow Service continues propagated Order traces from Kafka and propagates context through its Outbox to downstream Kafka commands. Its Actuator endpoints remain internal at `order-workflow-service:9090`; Workflow metrics and a dedicated dashboard are provisioned in the shared Prometheus/Grafana stack.
+Each service uses Spring Boot Actuator and Micrometer Tracing with the OpenTelemetry bridge and OTLP trace export to Tempo. Grafana provides trace search and dashboards; Prometheus scrapes `/actuator/prometheus` on the internal management ports. `spring.application.name` supplies each service's trace service name. HTTP tracing propagates W3C Trace Context through the Gateway and instrumented service clients; Kafka producer and listener observations continue context across event boundaries. Outbox records persist `traceparent` and `tracestate` so scheduled publishers preserve the originating context. Trace and span IDs are included in application log correlation fields.
 
-Stock Service now exposes internal Actuator endpoints, reservation/Outbox metrics, tracing, and a provisioned Grafana dashboard. A real trace has been verified through Order → Workflow → Stock and back to Workflow via Kafka. Stock management remains internal at `stock-service:9090`.
+The normal application sampling default is 10%; Docker Compose defaults to 100% for local trace verification. Set `TRACING_SAMPLING_PROBABILITY` to override either default. Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`; management ports remain internal to Compose.
 
 ## Main API Surface
 
@@ -335,7 +335,6 @@ This is a development/portfolio project, not a production-scale performance clai
 
 ## Next Steps
 
-- **Observability:** Actuator, Micrometer, Prometheus/Grafana, and tracing.
 - **Reliability:** Multi-instance Outbox publisher claiming/hardening.
 - **Performance:** k6 load/stress testing with p95/p99 characterization.
 - **Security hardening:** Refresh/revocation, JWKS/key rotation, MFA, and rate limiting.
