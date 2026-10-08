@@ -138,6 +138,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:4008
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     depends_on:
       - customer-service
       - order-service
@@ -160,6 +161,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: customer-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
     depends_on:
@@ -194,6 +196,7 @@ services:
       - ${HOME}/.ecommerce-keys/public.pem:/run/secrets/auth-keys/public.pem:ro
     environment:
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       CUSTOMER_SERVICE_BASE_URL: http://customer-service:4001
       PRODUCT_SERVICE_URL: http://product-service:4003/products
       SPRING_DATASOURCE_URL: jdbc:postgresql://order-db:5432/order
@@ -242,6 +245,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: product-pass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
     depends_on:
@@ -277,6 +281,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     depends_on:
       order-workflow-db:
         condition: service_healthy
@@ -313,6 +318,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     depends_on:
       stock-db:
         condition: service_healthy
@@ -347,6 +353,7 @@ services:
       - ./payment-service/.env.local
     environment:
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       ORDER_SERVICE_BASE_URL: http://order-service:4000
       SPRING_DATASOURCE_URL: jdbc:postgresql://payment-db:5432/payment
       SPRING_DATASOURCE_USERNAME: payment
@@ -393,6 +400,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_KAFKA_ADMIN_AUTO_CREATE: "false"
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     depends_on:
       auth-db:
         condition: service_healthy
