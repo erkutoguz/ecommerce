@@ -32,6 +32,7 @@ flowchart LR
     Gateway --> Auth[Auth Service]
     Gateway --> Customer[Customer Service]
     Gateway --> Product[Product Service]
+    Gateway --> Search[Search Service]
     Gateway --> Order[Order Service]
     Gateway --> Payment[Payment Service]
 
@@ -43,7 +44,12 @@ flowchart LR
     Stock -->|stock.events| Kafka
     Payment -->|payment.events| Kafka
     Product -->|product.events| Kafka
+    Kafka -->|product.events / stock-service group| Stock
+    Kafka -->|product.events / search-service group| Search
+    Search --> Elasticsearch[(Elasticsearch)]
 ```
+
+Product Service owns the PostgreSQL source of truth. Search Service asynchronously projects Product lifecycle events into Elasticsearch, which is an eventually consistent read model that can be recreated by replaying available Product events.
 
 | Service | Responsibility | Port |
 | --- | --- | ---: |
@@ -55,8 +61,10 @@ flowchart LR
 | Stock Service | Inventory and reservations | 4006 |
 | Payment Service | Stripe Checkout and webhooks | 4007 |
 | Auth Service | Registration, login, and JWT issuance | 4008* |
+| Search Service | Product search projection and Elasticsearch-backed search API | 4009 |
 
 `*` Auth and Order Workflow ports are internal to Compose. Kafka is available on `9092`; Kafka UI is on `4005`.
+Elasticsearch 9.4.5 is available locally on `9200`.
 
 ## Reliability & Messaging
 
@@ -87,7 +95,7 @@ POST /auth/register
 | Topic | Purpose |
 | --- | --- |
 | `customer.commands` | Auth-driven Customer provisioning |
-| `product.events` | Product catalog events consumed by Stock |
+| `product.events` | Product lifecycle events consumed independently by Stock (`stock-service` group) and Search (`search-service` group); failed deliveries route to the shared `product.events.DLT` |
 | `order.commands` / `order.events` | Order commands and lifecycle events |
 | `stock.commands` / `stock.events` | Stock reservation commands and results |
 | `payment.commands` / `payment.events` | Payment commands and results |
@@ -112,7 +120,7 @@ Public registration always creates `USER`; it does not accept or assign `ADMIN`.
 
 Gateway policy is intentionally coarse:
 
-- `POST /auth/register`, `POST /auth/login`, `GET /products/**`, and the Stripe webhook are public from the JWT perspective.
+- `POST /auth/register`, `POST /auth/login`, `GET /products/**`, `GET /search/**`, and the Stripe webhook are public from the JWT perspective.
 - Customer, Order, Cart, and Payment routes require authentication.
 - Product mutations and `/admin/**` require `ROLE_ADMIN`.
 - Unmatched routes are denied.
@@ -184,7 +192,7 @@ Stock and Order Workflow are Kafka/system-oriented and expose no user-facing bus
 
 ## Technology
 
-Java 21 · Spring Boot 4.1.1 · Spring Cloud Gateway WebMVC · Spring Kafka · Spring Data JPA/Hibernate · PostgreSQL 16 · Flyway · Apache Kafka 4.1.1 · Stripe Java SDK 33.4.0 · Docker Compose · Testcontainers 2.0.5 · JUnit · Maven
+Java 21 · Spring Boot 4.1.1 · Spring Cloud Gateway WebMVC · Spring Kafka · Spring Data JPA/Hibernate · Spring Data Elasticsearch · PostgreSQL 16 · Elasticsearch 9.4.5 · Flyway · Apache Kafka 4.1.1 · Stripe Java SDK 33.4.0 · Docker Compose · Testcontainers 2.0.5 · JUnit · Maven
 
 ## Running Locally
 
@@ -214,9 +222,11 @@ docker compose up -d --build
 
 The Gateway is available at `http://localhost:4002`. Compose starts Kafka, runs `kafka-init`, and then starts Kafka-dependent services only after topic initialization succeeds.
 
+Search is available through the Gateway at `http://localhost:4002/search/products` and directly at `http://localhost:4009/search/products`. Elasticsearch is bound to `http://localhost:9200`; Kafka clients on the host use `localhost:9092`. Search's local JVM defaults use `KAFKA_BOOTSTRAP_SERVERS=localhost:9092` and `ELASTICSEARCH_URIS=http://localhost:9200` (the Search port can be overridden with `SERVER_PORT`). Inside Compose, Search uses Kafka at `kafka:29092`, Elasticsearch at `http://elasticsearch:9200`, and the Gateway's `SEARCH_SERVICE_URL` points to `http://search-service:4009`; the Gateway's local default remains `http://localhost:4009`. The Search container waits for Kafka topic initialization and Elasticsearch health before starting. Elasticsearch data uses the named `elasticsearch-data` volume: `docker compose down` preserves the index, while `docker compose down -v` removes the volume and its data.
+
 ### Observability
 
-Each service uses Spring Boot Actuator and Micrometer Tracing with the OpenTelemetry bridge and OTLP trace export to Tempo. Grafana provides trace search and dashboards; Prometheus scrapes `/actuator/prometheus` on the internal management ports. `spring.application.name` supplies each service's trace service name. HTTP tracing propagates W3C Trace Context through the Gateway and instrumented service clients; Kafka producer and listener observations continue context across event boundaries. Outbox records persist `traceparent` and `tracestate` so scheduled publishers preserve the originating context. Trace and span IDs are included in application log correlation fields.
+Services wired into the observability stack use Spring Boot Actuator and Micrometer Tracing with the OpenTelemetry bridge and OTLP trace export to Tempo. Grafana provides trace search and dashboards; Prometheus scrapes `/actuator/prometheus` on their internal management ports. `spring.application.name` supplies each instrumented service's trace service name. HTTP tracing propagates W3C Trace Context through the Gateway and instrumented service clients; Kafka producer and listener observations continue context across event boundaries. Outbox records persist `traceparent` and `tracestate` so scheduled publishers preserve the originating context. Trace and span IDs are included in application log correlation fields. Search Service currently has no Actuator, Prometheus, or tracing dependencies and is not included in those scrapes/exports.
 
 The normal application sampling default is 10%; Docker Compose defaults to 100% for local trace verification. Set `TRACING_SAMPLING_PROBABILITY` to override either default. Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`; management ports remain internal to Compose.
 
@@ -229,6 +239,7 @@ POST /auth/register
 POST /auth/login
 
 GET  /products
+GET  /search/products
 GET  /customers/{customerId}
 GET  /admin/customers
 GET  /carts/current
@@ -241,6 +252,18 @@ POST /payments/webhooks/stripe
 ```
 
 Order calls `POST /products/bulk-lookup` directly at Product Service for catalog compatibility; it is not a public Gateway operation.
+
+### Product Search
+
+Search is an asynchronous projection: Product changes are committed to Product PostgreSQL and an Outbox record, then published to the existing `product.events` topic. Stock and Search consume that topic with independent groups. Search writes the projection to Elasticsearch; Product Service does not synchronously write Elasticsearch. PostgreSQL remains the source of truth, while the Elasticsearch index can be recreated by replaying Product events still available in Kafka and may briefly lag Product changes. A complete rebuild depends on the retained event history; the current Search service has no Product database snapshot/bootstrap path. Outbox/Kafka delivery may repeat messages; writes use the Product UUID as the Elasticsearch document ID. The current projection does not reject stale events by aggregate version.
+
+```http
+GET /search/products?q=iphone&minPrice=10000&maxPrice=70000&page=0&size=10&sort=price_asc
+```
+
+The endpoint is public through the Gateway and directly on Search Service. `q` searches Product name; a missing or blank `q` lists Products. Optional `minPrice` and `maxPrice` bounds filter results, and only `ACTIVE` Products are returned. `page` defaults to `0`, `size` to `10` (maximum `100`), and `sort` accepts `relevance`, `price_asc`, `price_desc`, or `newest`. Offset pagination is limited to Elasticsearch's 10,000-result window.
+
+Product creation and updates index/upsert the document under the same Product UUID. Deactivation updates its status, so public search filters it out; deletion removes the document. Search currently full-text searches Product name only; fuzzy search and autocomplete are not part of the current API.
 
 ## End-to-End Testing
 
@@ -316,6 +339,7 @@ Coverage includes:
 - Saga orchestration, compensation, and stock validation.
 - JWT signature/issuer/audience/expiration validation, ownership, RBAC, internal endpoints, and direct service enforcement.
 - Stripe signature verification, Payment ownership, bearer propagation, and webhook idempotency.
+- Search Service Kafka-to-Elasticsearch projection, Elasticsearch query/filter/pagination/sort behavior, controller validation, and Search/Gateway public-route security.
 - Out-of-stock, happy-path, and payment-expiry E2E scenarios.
 
 Run the multi-module suite with Docker available for Testcontainers:
@@ -329,6 +353,7 @@ mvn test
 - Core event-driven commerce flow is implemented and locally verifiable.
 - Auth JWT, Gateway authorization, Customer/Order ownership, ADMIN RBAC, Payment ownership, Stripe webhook verification, and Product RBAC are implemented.
 - Reliability behavior includes Outbox/Inbox messaging, idempotency, optimistic locking, Saga compensation, and deterministic Kafka initialization.
+- Product Search projects lifecycle events from `product.events` to Elasticsearch and exposes `GET /search/products` through the Gateway.
 - Integration tests and repeatable E2E scripts cover the main success and failure paths.
 
 This is a development/portfolio project, not a production-scale performance claim.

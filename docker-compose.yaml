@@ -79,6 +79,16 @@ services:
       xpack.security.transport.ssl.enabled: "false"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks:
       - app-network
     restart: unless-stopped
@@ -152,6 +162,7 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:4003
       PAYMENT_SERVICE_URL: http://payment-service:4007
       AUTH_SERVICE_URL: http://auth-service:4008
+      SEARCH_SERVICE_URL: http://search-service:4009
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
@@ -161,6 +172,7 @@ services:
       - product-service
       - payment-service
       - auth-service
+      - search-service
     networks:
       - app-network
 
@@ -286,6 +298,23 @@ services:
       retries: 10
     networks:
       - product-db-network
+
+  search-service:
+    build:
+      context: ./search-service
+    ports:
+      - "4009:4009"
+    environment:
+      SERVER_PORT: 4009
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - app-network
 
   order-workflow-service:
     build:
