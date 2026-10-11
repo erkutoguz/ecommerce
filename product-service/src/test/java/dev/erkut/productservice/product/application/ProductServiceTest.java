@@ -1,6 +1,9 @@
 package dev.erkut.productservice.product.application;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
+import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.productservice.message.event.ProductDeletedEvent;
+import dev.erkut.productservice.message.event.ProductUpdatedEvent;
 import dev.erkut.productservice.outbox.application.OutboxService;
 import dev.erkut.productservice.product.api.request.ProductCreateRequest;
 import dev.erkut.productservice.product.api.response.ProductResponse;
@@ -29,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,7 +71,9 @@ class ProductServiceTest {
         assertEquals(response.createdAt(), response.updatedAt());
         verify(productRepository).save(any(Product.class));
         verify(outboxService).createProductCreatedEvent(
-                new ProductCreatedEvent(PRODUCT_ID), response.createdAt());
+                new ProductCreatedEvent(
+                        PRODUCT_ID, "Keyboard", new BigDecimal("99.90"), ProductStatus.ACTIVE,
+                        response.createdAt(), response.updatedAt()), response.createdAt());
     }
 
     @Test
@@ -114,6 +120,9 @@ class ProductServiceTest {
         assertEquals("Mechanical Keyboard", response.name());
         assertEquals(new BigDecimal("99.90"), response.price());
         verify(productRepository, never()).save(any(Product.class));
+        verify(outboxService).createProductUpdatedEvent(new ProductUpdatedEvent(
+                PRODUCT_ID, response.name(), response.price(), ProductStatus.ACTIVE,
+                response.createdAt(), response.updatedAt()), response.updatedAt());
     }
 
     @Test
@@ -127,6 +136,9 @@ class ProductServiceTest {
         assertEquals("Keyboard", response.name());
         assertEquals(new BigDecimal("109.95"), response.price());
         verify(productRepository, never()).save(any(Product.class));
+        verify(outboxService).createProductUpdatedEvent(new ProductUpdatedEvent(
+                PRODUCT_ID, response.name(), response.price(), ProductStatus.ACTIVE,
+                response.createdAt(), response.updatedAt()), response.updatedAt());
     }
 
     @Test
@@ -140,6 +152,9 @@ class ProductServiceTest {
         assertEquals("Mechanical Keyboard", response.name());
         assertEquals(new BigDecimal("109.95"), response.price());
         verify(productRepository, never()).save(any(Product.class));
+        verify(outboxService).createProductUpdatedEvent(new ProductUpdatedEvent(
+                PRODUCT_ID, response.name(), response.price(), ProductStatus.ACTIVE,
+                response.createdAt(), response.updatedAt()), response.updatedAt());
     }
 
     @Test
@@ -173,6 +188,9 @@ class ProductServiceTest {
         assertEquals(ProductStatus.INACTIVE, product.getStatus());
         assertTrue(response.updatedAt().isAfter(CREATED_AT));
         verify(productRepository, never()).save(any(Product.class));
+        verify(outboxService).createProductDeactivatedEvent(new ProductDeactivatedEvent(
+                PRODUCT_ID, response.name(), response.price(), ProductStatus.INACTIVE,
+                response.createdAt(), response.updatedAt()), response.updatedAt());
     }
 
     @Test
@@ -183,6 +201,7 @@ class ProductServiceTest {
         productService().deleteProduct(PRODUCT_ID);
 
         verify(productRepository).delete(product);
+        verify(outboxService).createProductDeletedEvent(eq(new ProductDeletedEvent(PRODUCT_ID)), any());
     }
 
     @Test
@@ -194,7 +213,9 @@ class ProductServiceTest {
     }
 
     private static Product product(String name, BigDecimal price) {
-        return Product.create(name, price, CREATED_AT);
+        Product product = Product.create(name, price, CREATED_AT);
+        setField(product, "id", PRODUCT_ID);
+        return product;
     }
 
     private static void setField(Object target, String fieldName, Object value) {

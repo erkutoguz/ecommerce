@@ -2,6 +2,8 @@ package dev.erkut.productservice.product.application;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
 import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.productservice.message.event.ProductDeletedEvent;
+import dev.erkut.productservice.message.event.ProductUpdatedEvent;
 import dev.erkut.productservice.outbox.application.OutboxService;
 import dev.erkut.productservice.product.api.request.ProductBulkRequest;
 import dev.erkut.productservice.product.api.request.ProductCreateRequest;
@@ -44,7 +46,14 @@ public class ProductService {
         Product product = Product.create(req.name(), req.price(), now);
         Product savedProduct = productRepository.save(product);
 
-        ProductCreatedEvent event = new ProductCreatedEvent(savedProduct.getId());
+        ProductCreatedEvent event = new ProductCreatedEvent(
+                savedProduct.getId(),
+                savedProduct.getName(),
+                savedProduct.getPrice(),
+                savedProduct.getStatus(),
+                savedProduct.getCreatedAt(),
+                savedProduct.getUpdatedAt()
+        );
         outboxService.createProductCreatedEvent(event, now);
         return ProductMapper.toResponse(savedProduct);
     }
@@ -91,7 +100,14 @@ public class ProductService {
         Product product = findProductWithId(productId);
         product.deactivateProduct(now);
 
-        ProductDeactivatedEvent event = new ProductDeactivatedEvent(product.getId());
+        ProductDeactivatedEvent event = new ProductDeactivatedEvent(
+                product.getId(),
+                product.getName(),
+                product.getPrice(),
+                product.getStatus(),
+                product.getCreatedAt(),
+                product.getUpdatedAt()
+        );
         outboxService.createProductDeactivatedEvent(event, now);
         return ProductMapper.toResponse(product);
     }
@@ -99,6 +115,10 @@ public class ProductService {
     @Transactional
     public void deleteProduct(UUID productId) {
         Product product = findProductWithId(productId);
+        outboxService.createProductDeletedEvent(
+                new ProductDeletedEvent(product.getId()),
+                Instant.now()
+        );
         productRepository.delete(product);
     }
 
@@ -118,6 +138,16 @@ public class ProductService {
         if(req.price() != null) {
             product.changeProductPrice(req.price(), now);
         }
+
+        ProductUpdatedEvent event = new ProductUpdatedEvent(
+                product.getId(),
+                product.getName(),
+                product.getPrice(),
+                product.getStatus(),
+                product.getCreatedAt(),
+                product.getUpdatedAt()
+        );
+        outboxService.createProductUpdatedEvent(event, product.getUpdatedAt());
 
         return ProductMapper.toResponse(product);
     }

@@ -5,11 +5,14 @@ import dev.erkut.stockservice.message.event.ProductDeactivatedEvent;
 import dev.erkut.stockservice.message.event.ProductEventType;
 import dev.erkut.stockservice.message.event.ProductCreatedEvent;
 import dev.erkut.stockservice.stock.application.StockService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ProductEventsListener {
+    private static final Logger log = LoggerFactory.getLogger(ProductEventsListener.class);
 
     private final StockService stockService;
     private final ConsumerUtil consumerUtil;
@@ -30,6 +33,7 @@ public class ProductEventsListener {
 
         ProductEventType eventType = ProductEventType.from(envelope.messageType());
         if (eventType == null) {
+            log.warn("Ignoring unsupported Product event type: messageType={}", envelope.messageType());
             return;
         }
 
@@ -42,6 +46,11 @@ public class ProductEventsListener {
                 ProductDeactivatedEvent event = consumerUtil.deserialize(envelope.payload(), ProductDeactivatedEvent.class);
                 stockService.handleProductDeactivated(envelope, event);
             }
+            case PRODUCT_UPDATED_EVENT, PRODUCT_DELETED_EVENT -> log.info(
+                    "Ignoring Product event not used by Stock Service: messageType={}, messageId={}",
+                    envelope.messageType(),
+                    envelope.messageId()
+            );
         }
     }
 
