@@ -66,6 +66,10 @@ public class AuthUser {
         return new AuthUser(email, passwordHash, Role.USER, now);
     }
 
+    static AuthUser createLocalAdmin(String email, String passwordHash, Instant now) {
+        return new AuthUser(email, passwordHash, Role.ADMIN, now);
+    }
+
     private static String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
     }

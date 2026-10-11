@@ -1,11 +1,14 @@
 package dev.erkut.productservice.product.persistence;
 
 import dev.erkut.productservice.product.api.request.ProductCreateRequest;
+import dev.erkut.productservice.product.api.request.ProductUpdateRequest;
 import dev.erkut.productservice.product.domain.Product;
 import dev.erkut.productservice.product.domain.ProductStatus;
 import dev.erkut.productservice.product.application.ProductService;
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
 import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.productservice.message.event.ProductDeletedEvent;
+import dev.erkut.productservice.message.event.ProductUpdatedEvent;
 import dev.erkut.productservice.outbox.domain.OutboxMessage;
 import dev.erkut.productservice.outbox.domain.OutboxMessageType;
 import dev.erkut.productservice.outbox.domain.OutboxStatus;
@@ -112,10 +115,14 @@ class ProductPersistenceIntegrationTest {
         );
         assertEquals("vendor=value", outbox.getTracestate());
         assertNotNull(outbox.getCreatedAt());
-        assertEquals(created.productId(),
-                new tools.jackson.databind.json.JsonMapper()
-                        .treeToValue(outbox.getPayload(), ProductCreatedEvent.class)
-                        .productId());
+        ProductCreatedEvent event = new tools.jackson.databind.json.JsonMapper()
+                .treeToValue(outbox.getPayload(), ProductCreatedEvent.class);
+        assertEquals(created.productId(), event.productId());
+        assertEquals(created.name(), event.name());
+        assertEquals(0, created.price().compareTo(event.price()));
+        assertEquals(created.status(), event.status());
+        assertEquals(created.createdAt(), event.createdAt());
+        assertEquals(created.updatedAt(), event.updatedAt());
     }
 
     @Test
@@ -131,7 +138,7 @@ class ProductPersistenceIntegrationTest {
 
         var reloaded = productRepository.findById(created.getId()).orElseThrow();
         assertEquals("Updated Product", reloaded.getName());
-        assertEquals(new BigDecimal("30.00"), reloaded.getPrice());
+        assertEquals(0, new BigDecimal("30.00").compareTo(reloaded.getPrice()));
         assertEquals(CREATED_AT, reloaded.getCreatedAt());
     }
 
@@ -148,6 +155,35 @@ class ProductPersistenceIntegrationTest {
         var reloaded = productRepository.findById(created.getId()).orElseThrow();
         assertEquals(ProductStatus.INACTIVE, reloaded.getStatus());
         assertEquals(UPDATED_AT, reloaded.getUpdatedAt());
+    }
+
+    @Test
+    void productUpdatePersistsFullUpdatedSnapshotToOutbox() throws Exception {
+        var created = Product.create("Original Product", new BigDecimal("25.50"), CREATED_AT);
+        productRepository.saveAndFlush(created);
+
+        var updated = productService.updateProduct(
+                created.getId(), new ProductUpdateRequest("Updated Product", new BigDecimal("30.00")));
+        productRepository.flush();
+        entityManager.clear();
+
+        var reloaded = productRepository.findById(created.getId()).orElseThrow();
+        var outbox = outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
+                .stream()
+                .filter(message -> message.getAggregateId().equals(created.getId()))
+                .findFirst()
+                .orElseThrow();
+        ProductUpdatedEvent event = new tools.jackson.databind.json.JsonMapper()
+                .treeToValue(outbox.getPayload(), ProductUpdatedEvent.class);
+
+        assertEquals(OutboxMessageType.PRODUCT_UPDATED_EVENT, outbox.getMessageType());
+        assertEquals("Updated Product", reloaded.getName());
+        assertEquals(new BigDecimal("30.00"), reloaded.getPrice());
+        assertEquals(updated.name(), event.name());
+        assertEquals(0, updated.price().compareTo(event.price()));
+        assertEquals(updated.status(), event.status());
+        assertEquals(updated.createdAt(), event.createdAt());
+        assertEquals(updated.updatedAt(), event.updatedAt());
     }
 
     @Test
@@ -174,9 +210,35 @@ class ProductPersistenceIntegrationTest {
         assertEquals(OutboxMessageType.PRODUCT_DEACTIVATED_EVENT, outbox.getMessageType());
         assertEquals(created.getId(), outbox.getAggregateId());
         assertEquals(OutboxStatus.PENDING, outbox.getStatus());
-        assertEquals(created.getId(),
-                new tools.jackson.databind.json.JsonMapper()
-                        .treeToValue(outbox.getPayload(), ProductDeactivatedEvent.class)
-                        .productId());
+        ProductDeactivatedEvent event = new tools.jackson.databind.json.JsonMapper()
+                .treeToValue(outbox.getPayload(), ProductDeactivatedEvent.class);
+        assertEquals(created.getId(), event.productId());
+        assertEquals("Active Product", event.name());
+        assertEquals(0, new BigDecimal("25.50").compareTo(event.price()));
+        assertEquals(ProductStatus.INACTIVE, event.status());
+        assertEquals(reloaded.getCreatedAt(), event.createdAt());
+        assertEquals(reloaded.getUpdatedAt(), event.updatedAt());
+    }
+
+    @Test
+    void productDeleteAndOutboxEventPersistTogether() throws Exception {
+        var created = Product.create("Deleted Product", new BigDecimal("25.50"), CREATED_AT);
+        productRepository.saveAndFlush(created);
+
+        productService.deleteProduct(created.getId());
+        productRepository.flush();
+        entityManager.clear();
+
+        assertEquals(false, productRepository.findById(created.getId()).isPresent());
+        var outbox = outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
+                .stream()
+                .filter(message -> message.getAggregateId().equals(created.getId()))
+                .findFirst()
+                .orElseThrow();
+        ProductDeletedEvent event = new tools.jackson.databind.json.JsonMapper()
+                .treeToValue(outbox.getPayload(), ProductDeletedEvent.class);
+
+        assertEquals(OutboxMessageType.PRODUCT_DELETED_EVENT, outbox.getMessageType());
+        assertEquals(created.getId(), event.productId());
     }
 }

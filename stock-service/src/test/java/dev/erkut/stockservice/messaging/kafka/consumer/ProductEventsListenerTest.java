@@ -72,6 +72,35 @@ class ProductEventsListenerTest {
     }
 
     @Test
+    void expandedProductCreatedPayloadRemainsCompatibleWithStockContract() throws Exception {
+        MessageEnvelope envelope = envelope(
+                "PRODUCT_CREATED_EVENT",
+                jsonMapper.readTree("""
+                        {
+                          "productId":"90000000-0000-0000-0000-000000000001",
+                          "name":"Keyboard",
+                          "price":99.90,
+                          "status":"ACTIVE",
+                          "createdAt":"2026-01-01T10:00:00Z",
+                          "updatedAt":"2026-01-01T10:00:00Z"
+                        }
+                        """));
+
+        listener.listenProductEvent(envelope);
+
+        verify(stockService).handleProductCreated(eq(envelope), any(ProductCreatedEvent.class));
+    }
+
+    @Test
+    void validProductEventsNotUsedByStockAreIgnored() throws Exception {
+        listener.listenProductEvent(envelope("PRODUCT_UPDATED_EVENT", jsonMapper.createObjectNode()));
+        listener.listenProductEvent(envelope("PRODUCT_DELETED_EVENT", jsonMapper.createObjectNode()));
+
+        verify(stockService, never()).handleProductCreated(any(), any());
+        verify(stockService, never()).handleProductDeactivated(any(), any());
+    }
+
+    @Test
     void unknownMessageTypeIsIgnored() throws Exception {
         listener.listenProductEvent(envelope("FUTURE_PRODUCT_EVENT", jsonMapper.createObjectNode()));
 

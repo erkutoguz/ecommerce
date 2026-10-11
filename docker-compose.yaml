@@ -67,6 +67,33 @@ services:
       - app-network
     restart: unless-stopped
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.4.5
+    container_name: elasticsearch
+    ports:
+      - "127.0.0.1:9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app-network
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.5.0
     ports:
@@ -136,6 +163,7 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:4003
       PAYMENT_SERVICE_URL: http://payment-service:4007
       AUTH_SERVICE_URL: http://auth-service:4008
+      SEARCH_SERVICE_URL: http://search-service:4009
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://tempo:4318/v1/traces}
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
@@ -145,6 +173,7 @@ services:
       - product-service
       - payment-service
       - auth-service
+      - search-service
     networks:
       - app-network
 
@@ -271,6 +300,23 @@ services:
     networks:
       - product-db-network
 
+  search-service:
+    build:
+      context: ./search-service
+    ports:
+      - "4009:4009"
+    environment:
+      SERVER_PORT: 4009
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+
   order-workflow-service:
     build:
       context: ./order-workflow-service
@@ -392,9 +438,13 @@ services:
     volumes:
       - ${HOME}/.ecommerce-keys:/run/secrets/auth-keys:ro
     environment:
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth
       SPRING_DATASOURCE_USERNAME: auth
       SPRING_DATASOURCE_PASSWORD: auth-pass
+      AUTH_LOCAL_ADMIN_ENABLED: "true"
+      AUTH_LOCAL_ADMIN_EMAIL: search-e2e-admin@example.com
+      AUTH_LOCAL_ADMIN_PASSWORD: E2eSearchAdmin123!
       JWT_PRIVATE_KEY_PATH: /run/secrets/auth-keys/private.pem
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
@@ -452,3 +502,4 @@ volumes:
   prometheus-data:
   tempo-data:
   grafana-data:
+  elasticsearch-data:

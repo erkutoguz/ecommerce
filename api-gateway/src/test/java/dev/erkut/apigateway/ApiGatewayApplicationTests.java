@@ -86,6 +86,19 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void publicSearchGetDoesNotRequireJwt() throws Exception {
+        mockMvc.perform(get("/search/products"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void searchMutationMethodsRemainDenied() throws Exception {
+        mockMvc.perform(post("/search/products")
+                        .header(HttpHeaders.AUTHORIZATION, bearerToken(userToken())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void protectedRouteWithoutTokenReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/orders/test"))
                 .andExpect(status().isUnauthorized());
@@ -301,7 +314,7 @@ class ApiGatewayApplicationTests {
 
     @RestController
     static class TestRouteController {
-        @RequestMapping({"/auth/**", "/products/**", "/orders/**", "/payments/**", "/admin/**"})
+        @RequestMapping({"/auth/**", "/products/**", "/search/**", "/orders/**", "/payments/**", "/admin/**"})
         String respondOk() {
             return "ok";
         }

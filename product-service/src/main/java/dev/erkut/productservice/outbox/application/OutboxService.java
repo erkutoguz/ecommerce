@@ -2,6 +2,8 @@ package dev.erkut.productservice.outbox.application;
 
 import dev.erkut.productservice.message.event.ProductCreatedEvent;
 import dev.erkut.productservice.message.event.ProductDeactivatedEvent;
+import dev.erkut.productservice.message.event.ProductDeletedEvent;
+import dev.erkut.productservice.message.event.ProductUpdatedEvent;
 import dev.erkut.productservice.observability.tracing.OutboxTraceContext;
 import dev.erkut.productservice.outbox.application.exception.OutboxSerializationException;
 import dev.erkut.productservice.outbox.domain.OutboxMessage;
@@ -36,43 +38,49 @@ public class OutboxService {
 
     @Transactional
     public void createProductCreatedEvent(ProductCreatedEvent event, Instant createdAt) {
-        if(event == null) {
-            throw new IllegalArgumentException("Product created event cannot be null");
+        saveProductEvent(event == null ? null : event.productId(),
+                OutboxMessageType.PRODUCT_CREATED_EVENT, event, createdAt);
+    }
+
+    @Transactional
+    public void createProductUpdatedEvent(ProductUpdatedEvent event, Instant updatedAt) {
+        saveProductEvent(event == null ? null : event.productId(),
+                OutboxMessageType.PRODUCT_UPDATED_EVENT, event, updatedAt);
+    }
+
+    @Transactional
+    public void createProductDeactivatedEvent(ProductDeactivatedEvent event, Instant deactivatedAt) {
+        saveProductEvent(event == null ? null : event.productId(),
+                OutboxMessageType.PRODUCT_DEACTIVATED_EVENT, event, deactivatedAt);
+    }
+
+    @Transactional
+    public void createProductDeletedEvent(ProductDeletedEvent event, Instant deletedAt) {
+        saveProductEvent(event == null ? null : event.productId(),
+                OutboxMessageType.PRODUCT_DELETED_EVENT, event, deletedAt);
+    }
+
+    private void saveProductEvent(
+            UUID productId,
+            OutboxMessageType messageType,
+            Object event,
+            Instant createdAt
+    ) {
+        if (event == null) {
+            throw new IllegalArgumentException("Product event cannot be null");
         }
 
         JsonNode payload = serialize(event);
         OutboxTraceContext.Headers traceContext = outboxTraceContext.capture();
         OutboxMessage message = OutboxMessage.create(
-                event.productId(),
-                OutboxMessageType.PRODUCT_CREATED_EVENT,
+                productId,
+                messageType,
                 payload,
                 createdAt,
                 traceContext == null ? null : traceContext.traceparent(),
                 traceContext == null ? null : traceContext.tracestate()
         );
-
         outboxRepository.save(message);
-    }
-
-    @Transactional
-    public void createProductDeactivatedEvent(ProductDeactivatedEvent event, Instant deactivatedAt) {
-        if(event == null) {
-            throw new IllegalArgumentException("Product created event cannot be null");
-        }
-
-        JsonNode payload = serialize(event);
-        OutboxTraceContext.Headers traceContext = outboxTraceContext.capture();
-        OutboxMessage message = OutboxMessage.create(
-                event.productId(),
-                OutboxMessageType.PRODUCT_DEACTIVATED_EVENT,
-                payload,
-                deactivatedAt,
-                traceContext == null ? null : traceContext.traceparent(),
-                traceContext == null ? null : traceContext.tracestate()
-        );
-
-        outboxRepository.save(message);
-
     }
 
     @Transactional(readOnly = true)

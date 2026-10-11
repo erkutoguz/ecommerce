@@ -15,7 +15,10 @@ public class KafkaTopicResolver {
     public String resolve(OutboxMessageType messageType) {
         return switch (messageType) {
 
-            case PRODUCT_CREATED_EVENT, PRODUCT_DEACTIVATED_EVENT ->
+            case PRODUCT_CREATED_EVENT,
+                 PRODUCT_UPDATED_EVENT,
+                 PRODUCT_DEACTIVATED_EVENT,
+                 PRODUCT_DELETED_EVENT ->
                     topics.productEvents();
         };
     }
