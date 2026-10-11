@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -96,7 +97,9 @@ public class ProductService {
 
     @Transactional
     public ProductResponse deactivateProduct(UUID productId) {
-        Instant now = Instant.now();
+        // PostgreSQL TIMESTAMP WITH TIME ZONE stores microsecond precision. Use
+        // that precision in both the product snapshot and its outbox event.
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Product product = findProductWithId(productId);
         product.deactivateProduct(now);
 
