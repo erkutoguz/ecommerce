@@ -61,6 +61,10 @@ public class SecurityConfig {
                                 "/products/**"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/search/**"
+                        ).permitAll()
+                        .requestMatchers(
                                 "/products/**"
                         ).hasRole("ADMIN")
                         .requestMatchers(

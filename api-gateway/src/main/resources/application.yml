@@ -37,6 +37,11 @@ spring:
               predicates:
                 - Path=/products/**
 
+            - id: search-service
+              uri: ${SEARCH_SERVICE_URL:http://localhost:4009}
+              predicates:
+                - Path=/search/**
+
             - id: payment-service
               uri: ${PAYMENT_SERVICE_URL:http://localhost:4007}
               predicates:
