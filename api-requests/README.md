@@ -10,6 +10,8 @@
 
 Select the `local` JetBrains HTTP Client environment before running requests. Its static configuration comes from `api-requests/http-client.env.json`; do not rely on ignored IDE workspace state. Runtime values such as tokens and resource IDs are captured by the request handlers.
 
+The Compose `auth-service` runs with the `dev` profile and idempotently provisions the local Search E2E ADMIN (`search-e2e-admin@example.com`) using the local-only test credentials in the `local` HTTP Client environment. These are test credentials for the local Compose stack, not production credentials. Public registration remains USER-only.
+
 ## Start
 
 From the repository root:

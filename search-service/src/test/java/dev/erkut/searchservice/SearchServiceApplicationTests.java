@@ -72,6 +72,7 @@ class SearchServiceApplicationTests {
     @Container
     static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer(
             DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:9.4.5"))
+            .withEnv("ES_JAVA_OPTS", "-Xms1g -Xmx1g")
             .withEnv("discovery.type", "single-node")
             .withEnv("xpack.security.enabled", "false")
             .withEnv("xpack.security.http.ssl.enabled", "false")

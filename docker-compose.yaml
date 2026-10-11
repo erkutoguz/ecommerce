@@ -77,6 +77,7 @@ services:
       xpack.security.enabled: "false"
       xpack.security.http.ssl.enabled: "false"
       xpack.security.transport.ssl.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -437,9 +438,13 @@ services:
     volumes:
       - ${HOME}/.ecommerce-keys:/run/secrets/auth-keys:ro
     environment:
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://auth-db:5432/auth
       SPRING_DATASOURCE_USERNAME: auth
       SPRING_DATASOURCE_PASSWORD: auth-pass
+      AUTH_LOCAL_ADMIN_ENABLED: "true"
+      AUTH_LOCAL_ADMIN_EMAIL: search-e2e-admin@example.com
+      AUTH_LOCAL_ADMIN_PASSWORD: E2eSearchAdmin123!
       JWT_PRIVATE_KEY_PATH: /run/secrets/auth-keys/private.pem
       JWT_PUBLIC_KEY_PATH: /run/secrets/auth-keys/public.pem
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092

@@ -1,0 +1,180 @@
+# The local Compose Auth Service creates this ADMIN using its dev profile.
+# Auth.http registration remains USER-only.
+
+### 1. Login as ADMIN
+< {% client.global.clear("accessToken"); %}
+
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+> {%
+    if (response.status === 200 && response.body.accessToken != null) {
+        client.global.set("accessToken", response.body.accessToken);
+    } else {
+        client.global.clear("accessToken");
+        client.log("Local ADMIN login failed; confirm the Compose auth-service is running.");
+    }
+%}
+
+### 2. Create Product
+# Product mutations go through the Gateway and require the captured ADMIN token.
+# Produces: productId from ProductResponse.productId.
+< {% client.global.clear("productId"); %}
+
+POST {{baseUrl}}/products
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "name": "E2E Search Test Guitar",
+  "price": 25999.90
+}
+
+> {%
+    if (response.status === 201 && response.body.productId != null) {
+        client.global.set("productId", response.body.productId);
+    } else {
+        client.global.clear("productId");
+        client.log("Product creation failed; productId was cleared.");
+    }
+%}
+
+### 3. Search Product directly through Search Service
+# Product -> Outbox -> Kafka -> Search -> Elasticsearch is asynchronous.
+# Re-run after a brief moment if the newly created Product is not indexed yet.
+# Expected: this Product appears with ACTIVE status and price 25999.90.
+GET http://localhost:4009/search/products?q=E2E%20Search%20Test%20Guitar
+
+> {%
+    const content = response.body != null && Array.isArray(response.body.content)
+        ? response.body.content
+        : [];
+    const product = content.find(
+        item => item.productId === client.global.get("productId")
+    );
+    client.test("created Product appears in direct Search", function () {
+        client.assert(response.status === 200, "Expected 200 from Search Service");
+        client.assert(product != null, "Created Product must appear in Search");
+        if (product != null) {
+            client.assert(product.status === "ACTIVE", "Product must be ACTIVE");
+        }
+    });
+%}
+
+### 4. Search Product through API Gateway
+# Re-run after a brief moment if event projection has not completed.
+# Expected: the same Product appears through the public Gateway route.
+GET {{baseUrl}}/search/products?q=E2E%20Search%20Test%20Guitar
+
+> {%
+    const content = response.body != null && Array.isArray(response.body.content)
+        ? response.body.content
+        : [];
+    const product = content.find(
+        item => item.productId === client.global.get("productId")
+    );
+    client.test("created Product appears through Gateway Search", function () {
+        client.assert(response.status === 200, "Expected 200 from Gateway Search");
+        client.assert(product != null, "Created Product must appear in Gateway Search");
+    });
+%}
+
+### 5. Update Product
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "name": "E2E Search Test Guitar Updated",
+  "price": 29999.90
+}
+
+> {%
+    client.test("Product update succeeds", function () {
+        client.assert(response.status === 200, "Expected 200 from Product update");
+        client.assert(response.body.productId === client.global.get("productId"),
+            "Updated Product id must remain unchanged");
+    });
+%}
+
+### 6. Verify updated Search result
+# Re-run after a brief moment if the update event has not been projected yet.
+# Expected: same Product id, updated name and price 29999.90.
+GET {{baseUrl}}/search/products?q=E2E%20Search%20Test%20Guitar%20Updated
+
+> {%
+    const content = response.body != null && Array.isArray(response.body.content)
+        ? response.body.content
+        : [];
+    const product = content.find(
+        item => item.productId === client.global.get("productId")
+    );
+    client.test("updated Product appears in Search", function () {
+        client.assert(response.status === 200, "Expected 200 from Search");
+        client.assert(product != null, "Updated Product must appear in Search");
+        if (product != null) {
+            client.assert(product.name === "E2E Search Test Guitar Updated",
+                "Search must return the updated name");
+            client.assert(product.price === 29999.9, "Search must return the updated price");
+        }
+    });
+%}
+
+### 7. Deactivate Product
+POST {{baseUrl}}/products/{{productId}}/deactivate
+Authorization: Bearer {{accessToken}}
+
+> {%
+    client.test("Product deactivation succeeds", function () {
+        client.assert(response.status === 200, "Expected 200 from Product deactivation");
+        client.assert(response.body.status === "INACTIVE", "Product must be INACTIVE");
+    });
+%}
+
+### 8. Verify Product is hidden from public Search
+# Re-run after a brief moment if the deactivation event has not been projected yet.
+# The Elasticsearch document may still exist with INACTIVE status; public Search filters it out.
+GET {{baseUrl}}/search/products?q=E2E%20Search%20Test%20Guitar%20Updated
+
+> {%
+    const content = response.body != null && Array.isArray(response.body.content)
+        ? response.body.content
+        : [];
+    const product = content.find(
+        item => item.productId === client.global.get("productId")
+    );
+    client.test("deactivated Product is hidden from Search", function () {
+        client.assert(response.status === 200, "Expected 200 from Search");
+        client.assert(product == null, "INACTIVE Product must not appear in public Search");
+    });
+%}
+
+### 9. Inspect Elasticsearch document (optional local debugging)
+# Elasticsearch is a local development dependency, not a public application API.
+# Expected after deactivation: document exists and _source.status is INACTIVE.
+GET http://localhost:9200/products/_doc/{{productId}}
+
+### 10. Delete Product
+DELETE {{baseUrl}}/products/{{productId}}
+Authorization: Bearer {{accessToken}}
+
+> {%
+    client.test("Product deletion succeeds", function () {
+        client.assert(response.status === 204, "Expected 204 from Product deletion");
+    });
+%}
+
+### 11. Verify Elasticsearch document deletion
+# Outbox/Kafka projection is asynchronous. Run this request again after a short moment
+# if the ProductDeleted event has not yet removed the Elasticsearch document.
+# Expected after propagation: Elasticsearch returns 404 for the document.
+GET http://localhost:9200/products/_doc/{{productId}}
+
+### Optional Search price filter and sort
+# This request is public; only ACTIVE Products are returned.
+GET {{baseUrl}}/search/products?minPrice=10000&maxPrice=50000&page=0&size=10&sort=price_asc
