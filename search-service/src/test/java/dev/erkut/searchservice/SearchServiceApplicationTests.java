@@ -59,6 +59,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -150,6 +151,14 @@ class SearchServiceApplicationTests {
     }
 
     @Test
+    void managementEndpointsUseTheInternalPortAndExposePrometheusMetrics() {
+        assertEquals("9090", environment.getProperty("management.server.port"));
+        assertEquals("health,prometheus", environment.getProperty("management.endpoints.web.exposure.include"));
+        assertEquals("true", environment.getProperty(
+                "management.metrics.distribution.percentiles-histogram.http.server.requests"));
+    }
+
+    @Test
     void elasticsearchRepositoryRoundTripsStrictlyMappedProductDocument() {
         ProductSearchDocument document = ProductSearchDocument.create(
                 PRODUCT_ID,
@@ -208,74 +217,89 @@ class SearchServiceApplicationTests {
 
     @Test
     void productLifecycleEventsProjectThroughKafkaIntoElasticsearch() throws Exception {
+        UUID productId = UUID.randomUUID();
         send("PRODUCT_CREATED_EVENT", new ProductCreatedEvent(
-                PRODUCT_ID, "Keyboard", new BigDecimal("99.90"), ProductStatus.ACTIVE,
+                productId, "Keyboard", new BigDecimal("99.90"), ProductStatus.ACTIVE,
                 CREATED_AT, CREATED_AT, 0));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
-            ProductSearchDocument loaded = productRepository.findById(PRODUCT_ID).orElseThrow();
+            ProductSearchDocument loaded = requireProductDocument(productId);
             assertEquals("Keyboard", loaded.getName());
             assertEquals(0, new BigDecimal("99.90").compareTo(loaded.getPrice()));
             assertEquals(ProductStatus.ACTIVE, loaded.getStatus());
+            assertEquals(0L, loaded.getVersion());
         });
 
         Instant updatedAt = CREATED_AT.plusSeconds(60);
         send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(
-                PRODUCT_ID, "Mechanical Keyboard", new BigDecimal("109.90"), ProductStatus.ACTIVE,
+                productId, "Mechanical Keyboard", new BigDecimal("109.90"), ProductStatus.ACTIVE,
                 CREATED_AT, updatedAt, 1));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
-            ProductSearchDocument loaded = productRepository.findById(PRODUCT_ID).orElseThrow();
+            ProductSearchDocument loaded = requireProductDocument(productId);
             assertEquals("Mechanical Keyboard", loaded.getName());
             assertEquals(0, new BigDecimal("109.90").compareTo(loaded.getPrice()));
             assertEquals(updatedAt, loaded.getUpdatedAt());
+            assertEquals(1L, loaded.getVersion());
         });
 
         Instant deactivatedAt = updatedAt.plusSeconds(60);
         send("PRODUCT_DEACTIVATED_EVENT", new ProductDeactivatedEvent(
-                PRODUCT_ID, "Mechanical Keyboard", new BigDecimal("109.90"), ProductStatus.INACTIVE,
+                productId, "Mechanical Keyboard", new BigDecimal("109.90"), ProductStatus.INACTIVE,
                 CREATED_AT, deactivatedAt, 2));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
-                assertEquals(ProductStatus.INACTIVE,
-                        productRepository.findById(PRODUCT_ID).orElseThrow().getStatus()));
+        {
+            ProductSearchDocument loaded = requireProductDocument(productId);
+            assertEquals(ProductStatus.INACTIVE, loaded.getStatus());
+            assertEquals(2L, loaded.getVersion());
+        });
 
-        send("PRODUCT_DELETED_EVENT", new ProductDeletedEvent(PRODUCT_ID, 3));
+        send("PRODUCT_DELETED_EVENT", new ProductDeletedEvent(productId, 3));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
-                assertTrue(productRepository.findById(PRODUCT_ID).orElseThrow().isDeleted()));
+        {
+            ProductSearchDocument loaded = requireProductDocument(productId);
+            assertTrue(loaded.isDeleted());
+            assertEquals(3L, loaded.getVersion());
+        });
 
-        send("PRODUCT_DELETED_EVENT", new ProductDeletedEvent(PRODUCT_ID, 3));
+        send("PRODUCT_DELETED_EVENT", new ProductDeletedEvent(productId, 3));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
-                assertTrue(productRepository.findById(PRODUCT_ID).orElseThrow().isDeleted()));
+        {
+            ProductSearchDocument loaded = requireProductDocument(productId);
+            assertTrue(loaded.isDeleted());
+            assertEquals(3L, loaded.getVersion());
+        });
     }
 
     @Test
     void staleProductEventsAndUpdatesAfterDeleteCannotRevertSearchState() throws Exception {
+        UUID productId = UUID.randomUUID();
         Instant v1At = CREATED_AT.plusSeconds(1);
         Instant v2At = CREATED_AT.plusSeconds(2);
-        send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(PRODUCT_ID, "Newest", new BigDecimal("200.00"),
+        send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(productId, "Newest", new BigDecimal("200.00"),
                 ProductStatus.ACTIVE, CREATED_AT, v2At, 2));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
-                assertEquals(2L, productRepository.findById(PRODUCT_ID).orElseThrow().getVersion()));
+                assertEquals(2L, requireProductDocument(productId).getVersion()));
 
-        send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(PRODUCT_ID, "Stale", new BigDecimal("100.00"),
+        send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(productId, "Stale", new BigDecimal("100.00"),
                 ProductStatus.ACTIVE, CREATED_AT, v1At, 1));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
-            ProductSearchDocument current = productRepository.findById(PRODUCT_ID).orElseThrow();
+            ProductSearchDocument current = requireProductDocument(productId);
             assertEquals("Newest", current.getName());
             assertEquals(2L, current.getVersion());
         });
 
-        send("PRODUCT_DELETED_EVENT", new ProductDeletedEvent(PRODUCT_ID, 3));
+        send("PRODUCT_DELETED_EVENT", new ProductDeletedEvent(productId, 3));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
-                assertTrue(productRepository.findById(PRODUCT_ID).orElseThrow().isDeleted()));
-        send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(PRODUCT_ID, "Resurrected", new BigDecimal("100.00"),
+                assertTrue(requireProductDocument(productId).isDeleted()));
+        send("PRODUCT_UPDATED_EVENT", new ProductUpdatedEvent(productId, "Resurrected", new BigDecimal("100.00"),
                 ProductStatus.ACTIVE, CREATED_AT, v1At, 2));
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
-            ProductSearchDocument current = productRepository.findById(PRODUCT_ID).orElseThrow();
+            ProductSearchDocument current = requireProductDocument(productId);
             assertTrue(current.isDeleted());
             assertEquals(3L, current.getVersion());
         });
         elasticsearchOperations.indexOps(ProductSearchDocument.class).refresh();
         assertFalse(productSearchService.search(null, null, null, 0, 100, null).getContent().stream()
-                .anyMatch(product -> product.productId().equals(PRODUCT_ID)));
+                .anyMatch(product -> product.productId().equals(productId)));
     }
 
     @Test
@@ -496,10 +520,17 @@ class SearchServiceApplicationTests {
         );
     }
 
+    private ProductSearchDocument requireProductDocument(UUID productId) {
+        ProductSearchDocument document = productRepository.findById(productId).orElse(null);
+        assertNotNull(document, "Expected Product event to be projected into Elasticsearch");
+        return document;
+    }
+
     private void send(String eventType, Object event) throws Exception {
         var payload = jsonMapper.valueToTree(event);
         var envelope = new MessageEnvelope(UUID.randomUUID(), eventType, Instant.now(), payload);
-        kafkaTemplate.send(PRODUCT_EVENTS_TOPIC, PRODUCT_ID.toString(), envelope)
+        UUID productId = jsonMapper.convertValue(payload.get("productId"), UUID.class);
+        kafkaTemplate.send(PRODUCT_EVENTS_TOPIC, productId.toString(), envelope)
                 .get(10, TimeUnit.SECONDS);
     }
 

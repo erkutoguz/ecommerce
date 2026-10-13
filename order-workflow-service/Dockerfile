@@ -13,6 +13,6 @@ WORKDIR /app
 
 COPY --from=builder /app/target/order-workflow-service-0.0.1-SNAPSHOT.jar app.jar
 
-EXPOSE 4006
+EXPOSE 4004
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

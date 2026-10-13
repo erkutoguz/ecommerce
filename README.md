@@ -249,7 +249,9 @@ Search is available through the Gateway at `http://localhost:4002/search/product
 
 ### Observability
 
-Services wired into the observability stack use Spring Boot Actuator and Micrometer Tracing with the OpenTelemetry bridge and OTLP trace export to Tempo. Grafana provides trace search and dashboards; Prometheus scrapes `/actuator/prometheus` on their internal management ports. `spring.application.name` supplies each instrumented service's trace service name. HTTP tracing propagates W3C Trace Context through the Gateway and instrumented service clients; Kafka producer and listener observations continue context across event boundaries. Outbox records persist `traceparent` and `tracestate` so scheduled publishers preserve the originating context. Trace and span IDs are included in application log correlation fields. Search Service currently has no Actuator, Prometheus, or tracing dependencies and is not included in those scrapes/exports.
+Services wired into the observability stack use Spring Boot Actuator and Micrometer Tracing with the OpenTelemetry bridge and OTLP trace export to Tempo. Grafana provides trace search and dashboards; Prometheus scrapes `/actuator/prometheus` on their internal management ports. `spring.application.name` supplies each instrumented service's trace service name. HTTP tracing propagates W3C Trace Context through the Gateway and instrumented service clients; Kafka producer and listener observations continue context across event boundaries. Outbox records persist `traceparent` and `tracestate` so scheduled publishers preserve the originating context. Trace and span IDs are included in application log correlation fields. Search Service exposes its health and Prometheus endpoints on its internal management port and is included in Prometheus scraping and OTLP tracing.
+
+Outbox gauges use `outbox.pending.messages`, `outbox.in_progress.messages`, `outbox.expired.claims`, and `outbox.oldest.pending.age.seconds` in Auth, Product, Order, and Order Workflow. Stock and Payment use namespaced `stock.outbox.*` and `payment.outbox.*` gauges. These names reflect existing service-specific instrumentation; retain them when building dashboards.
 
 The normal application sampling default is 10%; Docker Compose defaults to 100% for local trace verification. Set `TRACING_SAMPLING_PROBABILITY` to override either default. Grafana is available at `http://localhost:3000` and Prometheus at `http://localhost:9091`; management ports remain internal to Compose.
 
@@ -383,7 +385,7 @@ This is a development/portfolio project, not a production-scale performance clai
 
 ## Next Steps
 
-- **Reliability:** Multi-instance Outbox publisher claiming/hardening.
-- **Performance:** k6 load/stress testing with p95/p99 characterization.
-- **Security hardening:** Refresh/revocation, JWKS/key rotation, MFA, and rate limiting.
-- **Optional capability:** Notification service.
+- **Performance:** k6 load and stress testing with p95/p99 characterization.
+- **Platform:** Local Kubernetes deployment.
+- **Performance & resilience:** Kubernetes scaling and resilience testing.
+- **Documentation:** Final architecture, deployment, and benchmark documentation.

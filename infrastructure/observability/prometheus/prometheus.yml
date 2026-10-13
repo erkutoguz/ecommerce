@@ -42,3 +42,8 @@ scrape_configs:
     static_configs:
       - targets:
           - product-service:9090
+  - job_name: search-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - search-service:9090

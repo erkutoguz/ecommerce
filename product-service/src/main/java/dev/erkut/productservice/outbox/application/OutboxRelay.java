@@ -39,7 +39,7 @@ public class OutboxRelay {
         this.outboxTraceContext = outboxTraceContext;
     }
 
-    @Scheduled(fixedDelayString = "${outbox.relay.fixed-relay-ms}")
+    @Scheduled(fixedDelayString = "${outbox.relay.fixed-delay-ms}")
     public void relay() {
         List<ClaimedOutboxMessage> claims = outboxService.claimMessages(BATCH_SIZE, CLAIM_LEASE_SECONDS);
         List<PendingPublish> sends = new ArrayList<>(claims.size());
