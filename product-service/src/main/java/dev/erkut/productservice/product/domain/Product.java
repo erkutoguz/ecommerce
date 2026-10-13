@@ -16,6 +16,10 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
@@ -115,6 +119,8 @@ public class Product {
     public UUID getId() {
         return id;
     }
+
+    public long getVersion() { return version == null ? 0L : version; }
 
     public String getName() {
         return name;

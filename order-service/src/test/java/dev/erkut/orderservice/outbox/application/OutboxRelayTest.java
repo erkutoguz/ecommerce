@@ -29,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -75,8 +77,7 @@ class OutboxRelayTest {
         CompletableFuture<SendResult<String, Object>> sendFuture = CompletableFuture.completedFuture(null);
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
 
-        when(outboxService.findPendingMessages())
-                .thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(messagePublisher.publish(eq(TOPIC), eq(aggregateId), envelopeCaptor.capture()))
                 .thenReturn(sendFuture);
 
@@ -87,7 +88,7 @@ class OutboxRelayTest {
         assertEquals(message.getId(), envelope.messageId());
         assertEquals(OutboxMessageType.ORDER_REJECTED_EVENT.name(), envelope.messageType());
         assertEquals(CREATED_AT, envelope.occurredAt());
-        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(UUID.class), any(Instant.class));
     }
 
     @Test
@@ -98,27 +99,23 @@ class OutboxRelayTest {
         CompletableFuture<SendResult<String, Object>> sendFuture = new CompletableFuture<>();
         sendFuture.completeExceptionally(failure);
 
-        when(outboxService.findPendingMessages())
-                .thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(messagePublisher.publish(eq(TOPIC), eq(aggregateId), any(MessageEnvelope.class)))
                 .thenReturn(sendFuture);
 
-        CompletionException exception = assertThrows(CompletionException.class, () -> outboxRelay.relay());
-
-        assertSame(failure, exception.getCause());
+        outboxRelay.relay();
         assertEquals(OutboxStatus.PENDING, message.getStatus());
-        verify(outboxService, never()).markPublished(any(UUID.class), any(Instant.class));
+        verify(outboxService, never()).markPublished(any(UUID.class), any(UUID.class), any(Instant.class));
     }
 
     @Test
     void relay_shouldDoNothingWhenNoPendingMessagesExist() {
-        when(outboxService.findPendingMessages())
-                .thenReturn(List.of());
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed());
 
         outboxRelay.relay();
 
         verifyNoInteractions(messagePublisher);
-        verify(outboxService, never()).markPublished(any(UUID.class), any(Instant.class));
+        verify(outboxService, never()).markPublished(any(UUID.class), any(UUID.class), any(Instant.class));
     }
 
     @Test
@@ -135,8 +132,7 @@ class OutboxRelayTest {
         ArgumentCaptor<UUID> keyCaptor = ArgumentCaptor.forClass(UUID.class);
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
 
-        when(outboxService.findPendingMessages())
-                .thenReturn(List.of(firstMessage, secondMessage));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(firstMessage, secondMessage));
         when(messagePublisher.publish(eq(TOPIC), keyCaptor.capture(), envelopeCaptor.capture()))
                 .thenReturn(sendFuture);
 
@@ -149,8 +145,8 @@ class OutboxRelayTest {
                 List.of(firstMessage.getId(), secondMessage.getId()),
                 envelopeCaptor.getAllValues().stream().map(MessageEnvelope::messageId).toList()
         );
-        verify(outboxService).markPublished(eq(firstMessage.getId()), any(Instant.class));
-        verify(outboxService).markPublished(eq(secondMessage.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(firstMessage.getId()), any(UUID.class), any(Instant.class));
+        verify(outboxService).markPublished(eq(secondMessage.getId()), any(UUID.class), any(Instant.class));
     }
 
     private static OutboxMessage pendingMessage(UUID aggregateId, Instant createdAt, JsonNode payload) {
@@ -161,4 +157,10 @@ class OutboxRelayTest {
                 createdAt
         );
     }
+    private static List<ClaimedOutboxMessage> claimed(OutboxMessage... messages) {
+        return java.util.Arrays.stream(messages)
+                .map(message -> new ClaimedOutboxMessage(message, UUID.randomUUID()))
+                .toList();
+    }
+
 }

@@ -18,6 +18,8 @@ public class ProductSearchDocument {
     private ProductStatus status;
     private Instant createdAt;
     private Instant updatedAt;
+    private long version;
+    private boolean deleted;
 
     protected ProductSearchDocument() {}
 
@@ -27,7 +29,9 @@ public class ProductSearchDocument {
             BigDecimal price,
             ProductStatus status,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            long version,
+            boolean deleted
     ) {
         if (productId == null) {
             throw new IllegalArgumentException("Product id cannot be null");
@@ -50,6 +54,8 @@ public class ProductSearchDocument {
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.version = version;
+        this.deleted = deleted;
     }
 
     public static ProductSearchDocument create(
@@ -58,9 +64,22 @@ public class ProductSearchDocument {
             BigDecimal price,
             ProductStatus status,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            long version
     ) {
-        return new ProductSearchDocument(productId, name, price, status, createdAt, updatedAt);
+        return new ProductSearchDocument(productId, name, price, status, createdAt, updatedAt, version, false);
+    }
+
+    public static ProductSearchDocument create(
+            UUID productId, String name, BigDecimal price, ProductStatus status,
+            Instant createdAt, Instant updatedAt
+    ) {
+        return create(productId, name, price, status, createdAt, updatedAt, 0L);
+    }
+
+    public static ProductSearchDocument tombstone(UUID productId, long version) {
+        return new ProductSearchDocument(productId, "deleted", BigDecimal.ONE, ProductStatus.INACTIVE,
+                Instant.EPOCH, Instant.EPOCH, version, true);
     }
 
     public UUID getProductId() {
@@ -86,5 +105,9 @@ public class ProductSearchDocument {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    public long getVersion() { return version; }
+
+    public boolean isDeleted() { return deleted; }
 
 }

@@ -20,6 +20,8 @@ import java.util.concurrent.CompletionException;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doAnswer;
@@ -59,28 +61,27 @@ class OutboxRelayTest {
     @Test
     void successfulKafkaPublishMarksMessagePublished() {
         OutboxMessage message = message();
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(topicResolver.resolve(OutboxMessageType.CREATE_CUSTOMER_COMMAND)).thenReturn("customer.commands");
         when(messagePublisher.publish(eq("customer.commands"), eq(AUTH_USER_ID), any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         new OutboxRelay(outboxService, messagePublisher, topicResolver, outboxTraceContext).relay();
 
-        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(UUID.class), any(Instant.class));
     }
 
     @Test
     void failedKafkaPublishLeavesMessagePending() {
         OutboxMessage message = message();
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(topicResolver.resolve(OutboxMessageType.CREATE_CUSTOMER_COMMAND)).thenReturn("customer.commands");
         when(messagePublisher.publish(eq("customer.commands"), eq(AUTH_USER_ID), any()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("Kafka unavailable")));
 
-        assertThrows(CompletionException.class,
-                () -> new OutboxRelay(outboxService, messagePublisher, topicResolver, outboxTraceContext).relay());
+        new OutboxRelay(outboxService, messagePublisher, topicResolver, outboxTraceContext).relay();
 
-        verify(outboxService, never()).markPublished(any(), any());
+        verify(outboxService, never()).markPublished(any(), any(), any());
     }
 
     private static OutboxMessage message() {
@@ -91,4 +92,10 @@ class OutboxRelayTest {
                 CREATED_AT
         );
     }
+    private static List<ClaimedOutboxMessage> claimed(OutboxMessage... messages) {
+        return java.util.Arrays.stream(messages)
+                .map(message -> new ClaimedOutboxMessage(message, UUID.randomUUID()))
+                .toList();
+    }
+
 }

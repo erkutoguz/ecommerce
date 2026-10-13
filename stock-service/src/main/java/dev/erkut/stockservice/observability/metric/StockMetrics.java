@@ -45,6 +45,11 @@ public class StockMetrics {
                 .register(registry);
         Gauge.builder("stock.outbox.pending.messages", outboxRepository, OutboxMessageRepository::countPendingMessages)
                 .register(registry);
+        Gauge.builder("stock.outbox.in_progress.messages", outboxRepository,
+                repository -> repository.countByStatus(dev.erkut.stockservice.outbox.domain.OutboxStatus.IN_PROGRESS))
+                .register(registry);
+        Gauge.builder("stock.outbox.expired.claims", outboxRepository, OutboxMessageRepository::countExpiredClaims)
+                .register(registry);
         Gauge.builder("stock.outbox.oldest.pending.age.seconds", this, StockMetrics::oldestPendingOutboxAgeSeconds)
                 .register(registry);
     }

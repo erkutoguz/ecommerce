@@ -38,6 +38,18 @@ public class OutboxMessage {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "claim_token")
+    private UUID claimToken;
+
+    @Column(name = "claim_until")
+    private Instant claimUntil;
+
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
+    @Column(name = "next_attempt_at", nullable = false)
+    private Instant nextAttemptAt;
+
     @Column(name = "traceparent", length = 55)
     private String traceparent;
 
@@ -77,6 +89,10 @@ public class OutboxMessage {
         this.payload = payload;
         this.createdAt = createdAt;
         this.publishedAt = null;
+        this.claimToken = null;
+        this.claimUntil = null;
+        this.attemptCount = 0;
+        this.nextAttemptAt = createdAt;
         this.traceparent = traceparent;
         this.tracestate = tracestate;
     }
@@ -141,6 +157,10 @@ public class OutboxMessage {
     public Instant getPublishedAt() {
         return publishedAt;
     }
+
+    public int getAttemptCount() { return attemptCount; }
+
+    public UUID getClaimToken() { return claimToken; }
 
     public String getTraceparent() {
         return traceparent;

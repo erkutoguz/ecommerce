@@ -17,6 +17,11 @@ public class OutboxMetrics {
     public OutboxMetrics(MeterRegistry registry, OutboxMessageRepository repository) {
         this.repository = repository;
 
+        Gauge.builder("outbox.in_progress.messages", repository,
+                outboxRepository -> outboxRepository.countByStatus(OutboxStatus.IN_PROGRESS)).register(registry);
+        Gauge.builder("outbox.expired.claims", repository, OutboxMessageRepository::countExpiredClaims)
+                .register(registry);
+
         Gauge.builder(
                 "outbox.pending.messages",
                 repository,

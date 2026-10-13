@@ -128,8 +128,7 @@ class ProductPersistenceIntegrationTest {
     @Test
     void managedEntityNameAndPriceUpdatesPersistThroughDirtyChecking() {
         var created = Product.create("Original Product", new BigDecimal("25.50"), CREATED_AT);
-        productRepository.save(created);
-        productRepository.flush();
+        created = productRepository.saveAndFlush(created);
 
         created.changeProductName("Updated Product", UPDATED_AT);
         created.changeProductPrice(new BigDecimal("30.00"), UPDATED_AT);
@@ -145,8 +144,7 @@ class ProductPersistenceIntegrationTest {
     @Test
     void managedEntityDeactivationPersistsThroughDirtyChecking() {
         var created = Product.create("Active Product", new BigDecimal("25.50"), CREATED_AT);
-        productRepository.save(created);
-        productRepository.flush();
+        created = productRepository.saveAndFlush(created);
 
         created.deactivateProduct(UPDATED_AT);
         productRepository.flush();
@@ -160,17 +158,18 @@ class ProductPersistenceIntegrationTest {
     @Test
     void productUpdatePersistsFullUpdatedSnapshotToOutbox() throws Exception {
         var created = Product.create("Original Product", new BigDecimal("25.50"), CREATED_AT);
-        productRepository.saveAndFlush(created);
+        created = productRepository.saveAndFlush(created);
+        var createdId = created.getId();
 
         var updated = productService.updateProduct(
-                created.getId(), new ProductUpdateRequest("Updated Product", new BigDecimal("30.00")));
+                createdId, new ProductUpdateRequest("Updated Product", new BigDecimal("30.00")));
         productRepository.flush();
         entityManager.clear();
 
-        var reloaded = productRepository.findById(created.getId()).orElseThrow();
+        var reloaded = productRepository.findById(createdId).orElseThrow();
         var outbox = outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
                 .stream()
-                .filter(message -> message.getAggregateId().equals(created.getId()))
+                .filter(message -> message.getAggregateId().equals(createdId))
                 .findFirst()
                 .orElseThrow();
         ProductUpdatedEvent event = new tools.jackson.databind.json.JsonMapper()
@@ -189,18 +188,18 @@ class ProductPersistenceIntegrationTest {
     @Test
     void productDeactivationPersistsInactiveProductAndPendingOutboxEvent() throws Exception {
         var created = Product.create("Active Product", new BigDecimal("25.50"), CREATED_AT);
-        productRepository.save(created);
-        productRepository.flush();
+        created = productRepository.saveAndFlush(created);
+        var createdId = created.getId();
 
-        productService.deactivateProduct(created.getId());
+        productService.deactivateProduct(createdId);
         productRepository.flush();
         entityManager.clear();
 
-        var reloaded = productRepository.findById(created.getId()).orElseThrow();
+        var reloaded = productRepository.findById(createdId).orElseThrow();
         var relevantMessages = outboxMessageRepository
                 .findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
                 .stream()
-                .filter(message -> message.getAggregateId().equals(created.getId()))
+                .filter(message -> message.getAggregateId().equals(createdId))
                 .toList();
 
         assertEquals(ProductStatus.INACTIVE, reloaded.getStatus());
@@ -223,22 +222,23 @@ class ProductPersistenceIntegrationTest {
     @Test
     void productDeleteAndOutboxEventPersistTogether() throws Exception {
         var created = Product.create("Deleted Product", new BigDecimal("25.50"), CREATED_AT);
-        productRepository.saveAndFlush(created);
+        created = productRepository.saveAndFlush(created);
+        var createdId = created.getId();
 
-        productService.deleteProduct(created.getId());
+        productService.deleteProduct(createdId);
         productRepository.flush();
         entityManager.clear();
 
-        assertEquals(false, productRepository.findById(created.getId()).isPresent());
+        assertEquals(false, productRepository.findById(createdId).isPresent());
         var outbox = outboxMessageRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING)
                 .stream()
-                .filter(message -> message.getAggregateId().equals(created.getId()))
+                .filter(message -> message.getAggregateId().equals(createdId))
                 .findFirst()
                 .orElseThrow();
         ProductDeletedEvent event = new tools.jackson.databind.json.JsonMapper()
                 .treeToValue(outbox.getPayload(), ProductDeletedEvent.class);
 
         assertEquals(OutboxMessageType.PRODUCT_DELETED_EVENT, outbox.getMessageType());
-        assertEquals(created.getId(), event.productId());
+        assertEquals(createdId, event.productId());
     }
 }

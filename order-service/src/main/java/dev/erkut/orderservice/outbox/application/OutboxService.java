@@ -36,12 +36,17 @@ public class OutboxService {
         this.outboxTraceContext = outboxTraceContext;
     }
 
-    @Transactional(readOnly = true)
-    public List<OutboxMessage> findPendingMessages() {
-        return outboxRepository
-                .findTop100ByStatusOrderByCreatedAtAsc(
-                        OutboxStatus.PENDING
-                );
+    @Transactional
+    public List<ClaimedOutboxMessage> claimMessages(int batchSize, long leaseSeconds) {
+        List<Object[]> claims = outboxRepository.claimEligibleMessages(batchSize, leaseSeconds);
+        if (claims.isEmpty()) return List.of();
+        java.util.Map<UUID, UUID> tokenById = new java.util.HashMap<>();
+        for (Object[] row : claims) tokenById.put((UUID) row[0], (UUID) row[1]);
+        return outboxRepository.findAllById(tokenById.keySet()).stream()
+                .map(message -> new ClaimedOutboxMessage(message, tokenById.get(message.getId())))
+                .sorted(java.util.Comparator.comparing((ClaimedOutboxMessage c) -> c.message().getCreatedAt())
+                        .thenComparing(c -> c.message().getId()))
+                .toList();
     }
 
     @Transactional
@@ -102,13 +107,13 @@ public class OutboxService {
     }
 
     @Transactional
-    public void markPublished(UUID messageId, Instant publishedAt) {
-        OutboxMessage message = outboxRepository.findById(messageId)
-                .orElseThrow(() ->
-                        new IllegalStateException("Outbox message not found: " + messageId)
-                );
+    public boolean markPublished(UUID messageId, UUID claimToken, Instant publishedAt) {
+        return outboxRepository.markClaimedMessagePublished(messageId, claimToken, publishedAt) == 1;
+    }
 
-        message.markPublished(publishedAt);
+    @Transactional
+    public boolean reschedule(UUID messageId, UUID claimToken, Instant retryAt) {
+        return outboxRepository.rescheduleClaimedMessage(messageId, claimToken, retryAt) == 1;
     }
 
     private JsonNode serialize(Object event) {

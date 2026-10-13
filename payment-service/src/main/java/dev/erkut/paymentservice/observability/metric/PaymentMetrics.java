@@ -43,6 +43,11 @@ public class PaymentMetrics {
                 .register(registry);
         Gauge.builder("payment.outbox.pending.messages", outboxRepository, OutboxMessageRepository::countPendingMessages)
                 .register(registry);
+        Gauge.builder("payment.outbox.in_progress.messages", outboxRepository,
+                repository -> repository.countByStatus(dev.erkut.paymentservice.outbox.domain.OutboxStatus.IN_PROGRESS))
+                .register(registry);
+        Gauge.builder("payment.outbox.expired.claims", outboxRepository, OutboxMessageRepository::countExpiredClaims)
+                .register(registry);
         Gauge.builder("payment.outbox.oldest.pending.age.seconds", this, PaymentMetrics::oldestPendingOutboxAgeSeconds)
                 .register(registry);
     }
