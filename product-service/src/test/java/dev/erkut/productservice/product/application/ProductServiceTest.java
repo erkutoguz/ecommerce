@@ -56,7 +56,7 @@ class ProductServiceTest {
 
     @Test
     void createProductCreatesSavesAndMapsProduct() {
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+        when(productRepository.saveAndFlush(any(Product.class))).thenAnswer(invocation -> {
             Product product = invocation.getArgument(0);
             setField(product, "id", PRODUCT_ID);
             return product;
@@ -69,7 +69,7 @@ class ProductServiceTest {
         assertEquals(new BigDecimal("99.90"), response.price());
         assertEquals(ProductStatus.ACTIVE, response.status());
         assertEquals(response.createdAt(), response.updatedAt());
-        verify(productRepository).save(any(Product.class));
+        verify(productRepository).saveAndFlush(any(Product.class));
         verify(outboxService).createProductCreatedEvent(
                 new ProductCreatedEvent(
                         PRODUCT_ID, "Keyboard", new BigDecimal("99.90"), ProductStatus.ACTIVE,
@@ -119,7 +119,7 @@ class ProductServiceTest {
 
         assertEquals("Mechanical Keyboard", response.name());
         assertEquals(new BigDecimal("99.90"), response.price());
-        verify(productRepository, never()).save(any(Product.class));
+        verify(productRepository).saveAndFlush(product);
         verify(outboxService).createProductUpdatedEvent(new ProductUpdatedEvent(
                 PRODUCT_ID, response.name(), response.price(), ProductStatus.ACTIVE,
                 response.createdAt(), response.updatedAt()), response.updatedAt());
@@ -135,7 +135,7 @@ class ProductServiceTest {
 
         assertEquals("Keyboard", response.name());
         assertEquals(new BigDecimal("109.95"), response.price());
-        verify(productRepository, never()).save(any(Product.class));
+        verify(productRepository).saveAndFlush(product);
         verify(outboxService).createProductUpdatedEvent(new ProductUpdatedEvent(
                 PRODUCT_ID, response.name(), response.price(), ProductStatus.ACTIVE,
                 response.createdAt(), response.updatedAt()), response.updatedAt());
@@ -151,7 +151,7 @@ class ProductServiceTest {
 
         assertEquals("Mechanical Keyboard", response.name());
         assertEquals(new BigDecimal("109.95"), response.price());
-        verify(productRepository, never()).save(any(Product.class));
+        verify(productRepository).saveAndFlush(product);
         verify(outboxService).createProductUpdatedEvent(new ProductUpdatedEvent(
                 PRODUCT_ID, response.name(), response.price(), ProductStatus.ACTIVE,
                 response.createdAt(), response.updatedAt()), response.updatedAt());
@@ -174,11 +174,11 @@ class ProductServiceTest {
         assertThrows(InvalidProductStateException.class,
                 () -> productService().updateProduct(
                         PRODUCT_ID, new ProductUpdateRequest("New name", null)));
-        verify(productRepository, never()).save(any(Product.class));
+        verify(productRepository, never()).saveAndFlush(any(Product.class));
     }
 
     @Test
-    void deactivateProductMutatesManagedEntityWithoutSavingAgain() {
+    void deactivateProductFlushesVersionBeforeCreatingEvent() {
         Product product = product("Keyboard", new BigDecimal("99.90"));
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
 
@@ -187,7 +187,7 @@ class ProductServiceTest {
         assertEquals(ProductStatus.INACTIVE, response.status());
         assertEquals(ProductStatus.INACTIVE, product.getStatus());
         assertTrue(response.updatedAt().isAfter(CREATED_AT));
-        verify(productRepository, never()).save(any(Product.class));
+        verify(productRepository).saveAndFlush(any(Product.class));
         verify(outboxService).createProductDeactivatedEvent(new ProductDeactivatedEvent(
                 PRODUCT_ID, response.name(), response.price(), ProductStatus.INACTIVE,
                 response.createdAt(), response.updatedAt()), response.updatedAt());
@@ -201,7 +201,7 @@ class ProductServiceTest {
         productService().deleteProduct(PRODUCT_ID);
 
         verify(productRepository).delete(product);
-        verify(outboxService).createProductDeletedEvent(eq(new ProductDeletedEvent(PRODUCT_ID)), any());
+        verify(outboxService).createProductDeletedEvent(eq(new ProductDeletedEvent(PRODUCT_ID, 1)), any());
     }
 
     @Test

@@ -70,11 +70,34 @@ Elasticsearch 9.4.5 is available locally on `9200`.
 
 - Database-per-service with Flyway-owned schemas.
 - Transactional Outbox and consumer Inbox for reliable, idempotent messaging.
+- PostgreSQL `FOR UPDATE SKIP LOCKED` claims with expiring leases and token-checked completion for all six Outbox publishers.
 - Kafka at-least-once delivery with idempotent consumers and `.DLT` topics.
 - Optimistic locking for carts, stock, reservations, and Saga state.
 - Saga orchestration with compensation instead of distributed rollback.
 - Stock validates all requested items before mutating inventory.
 - Stripe Checkout uses an order-based idempotency key; webhooks verify `Stripe-Signature`.
+
+### Multi-instance Outbox delivery
+
+Each service commits business state and its Outbox row in the same local database transaction. A relay then claims due rows in a short PostgreSQL transaction, commits the claim, publishes to Kafka outside that transaction, waits for the producer acknowledgement, and marks the row `PUBLISHED` only if its claim token still owns the row:
+
+```text
+business row + Outbox(PENDING) commit
+  → SELECT ... FOR UPDATE SKIP LOCKED + atomic IN_PROGRESS claim
+  → claim transaction commit
+  → Kafka publish and acknowledgement (no database lock held)
+  → token-checked PUBLISHED update
+```
+
+The claim token changes on each claim attempt. A crashed worker's claim can be reclaimed after its lease expires; the previous token then cannot complete the new owner's claim. Producer delivery timeout is configured to 120 seconds and the current relay lease is 180 seconds, leaving 60 seconds for relay scheduling and database completion. This is an operational bound, not a Kafka fencing mechanism: a paused process can still send late after lease takeover. If Kafka acknowledged but the database completion did not commit, the row is retried with its original `messageId`; duplicates therefore remain possible and consumers must stay idempotent. Delivery is at least once, not exactly once.
+
+Claims preserve per-aggregate head-of-line progress by not claiming a later unpublished row while an earlier row for that aggregate remains unresolved. This uses `(created_at, id)` to choose the head; it does not turn timestamps into a transaction commit sequence. Product events additionally carry the Product's optimistic-lock version. Search atomically accepts only a newer version and retains versioned delete tombstones, so an older update cannot overwrite or resurrect a deleted Product. Kafka ordering is still per partition and does not provide global ordering across topics.
+
+The claim query's same-aggregate predecessor check is supported by a partial `(aggregate_id, created_at, id)` index over unpublished rows. Verified deployment scope for this milestone is a clean, fresh deployment using the current versioned Product event contracts. Legacy Product events without versions and upgrades from old persisted Kafka, Outbox, or Search state are outside the verified deployment scope. Do not reset offsets or rebuild a Search index from pre-version events; those records do not carry the monotonic version needed to reject stale updates or deletes.
+
+Failed sends are rescheduled with bounded exponential delay (up to five minutes); failures are logged with message ID and attempt, and one failing aggregate does not stop the relay from starting sends for unrelated claimed aggregates. Messages are not silently discarded after a retry threshold. A persistently failing message remains visible as pending and blocks later messages for its aggregate until the cause is fixed. Operators can inspect Outbox pending count, oldest pending age, in-progress count, and expired-claim count from service Micrometer metrics where Actuator is enabled. Kafka producer observations and relay traces/logs provide publish timing and per-message failure context; metrics deliberately avoid message- and aggregate-ID labels.
+
+Verification for this hardening includes 32 PostgreSQL Testcontainers claim-concurrency cases across all six Outbox publishers and a fresh isolated Compose run with two Product instances. The runtime run exercised API-generated Product lifecycle events, 24 concurrent Product creates, claim recovery after a worker stopped before publishing, and recovery after Kafka accepted a record but the `PUBLISHED` database update was interrupted. The latter produced two Kafka records with the same `messageId`, as expected for at-least-once delivery, while Search retained one Product document. A stale v1 update replayed after a v3 delete left the Elasticsearch tombstone at v3. Auth-to-Customer duplicate delivery and stock-failure Saga compensation were also exercised. Stripe-dependent payment flows were not run; this local verification is not a load or production-readiness claim.
 
 ### Auth → Customer provisioning
 
@@ -255,7 +278,7 @@ Order calls `POST /products/bulk-lookup` directly at Product Service for catalog
 
 ### Product Search
 
-Search is an asynchronous projection: Product changes are committed to Product PostgreSQL and an Outbox record, then published to the existing `product.events` topic. Stock and Search consume that topic with independent groups. Search writes the projection to Elasticsearch; Product Service does not synchronously write Elasticsearch. PostgreSQL remains the source of truth, while the Elasticsearch index can be recreated by replaying Product events still available in Kafka and may briefly lag Product changes. A complete rebuild depends on the retained event history; the current Search service has no Product database snapshot/bootstrap path. Outbox/Kafka delivery may repeat messages; writes use the Product UUID as the Elasticsearch document ID. The current projection does not reject stale events by aggregate version.
+Search is an asynchronous projection: Product changes are committed to Product PostgreSQL and an Outbox record, then published to the existing `product.events` topic. Stock and Search consume that topic with independent groups. Search writes the projection to Elasticsearch; Product Service does not synchronously write Elasticsearch. PostgreSQL remains the source of truth, while the Elasticsearch index can be recreated by replaying Product events still available in Kafka and may briefly lag Product changes. A complete rebuild depends on the retained event history; the current Search service has no Product database snapshot/bootstrap path. Outbox/Kafka delivery may repeat messages; writes use the Product UUID as the Elasticsearch document ID. For current versioned Product events, Search atomically rejects older versions and retains deletion tombstones so delayed updates cannot resurrect deleted Products. Legacy versionless event replay and upgrades from persisted pre-version state are outside the verified deployment scope.
 
 ```http
 GET /search/products?q=iphone&minPrice=10000&maxPrice=70000&page=0&size=10&sort=price_asc

@@ -35,20 +35,16 @@ public class ElasticsearchIndexInitializer implements ApplicationRunner {
         IndexOperations indexOperations =
                 elasticsearchOperations.indexOps(ProductSearchDocument.class);
 
-        if (indexOperations.exists()) {
-            return;
-        }
-
-        Settings settings = Settings.parse(readResource(SETTINGS_PATH));
         Document mapping = Document.parse(readResource(MAPPINGS_PATH));
-
-        boolean created = indexOperations.create(settings, mapping);
-
-        if (!created) {
-            throw new IllegalStateException(
-                    "Failed to create Elasticsearch products index"
-            );
+        if (!indexOperations.exists()) {
+            Settings settings = Settings.parse(readResource(SETTINGS_PATH));
+            boolean created = indexOperations.create(settings, mapping);
+            if (!created) {
+                throw new IllegalStateException("Failed to create Elasticsearch products index");
+            }
         }
+        // Additive mapping update is required for existing indexes when versioned events roll out.
+        indexOperations.putMapping(mapping);
     }
 
     private String readResource(String path) throws IOException {

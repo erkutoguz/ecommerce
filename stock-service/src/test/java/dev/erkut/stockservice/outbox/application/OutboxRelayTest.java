@@ -26,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,7 +71,7 @@ class OutboxRelayTest {
                 CREATED_AT
         );
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(topicResolver.resolve(OutboxMessageType.STOCK_RESERVED_EVENT)).thenReturn("stock.events");
         when(messagePublisher.publish(eq("stock.events"), eq(ORDER_ID), envelopeCaptor.capture()))
                 .thenReturn(CompletableFuture.completedFuture(null));
@@ -81,7 +83,7 @@ class OutboxRelayTest {
         assertEquals(OutboxMessageType.STOCK_RESERVED_EVENT.name(), envelope.messageType());
         assertEquals(CREATED_AT, envelope.occurredAt());
         assertSame(payload, envelope.payload());
-        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(UUID.class), any(Instant.class));
     }
 
     @Test
@@ -94,14 +96,14 @@ class OutboxRelayTest {
         );
         CompletableFuture<SendResult<String, Object>> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("Kafka unavailable"));
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(topicResolver.resolve(OutboxMessageType.STOCK_RESERVATION_FAILED_EVENT)).thenReturn("stock.events");
         when(messagePublisher.publish(eq("stock.events"), eq(ORDER_ID), any(MessageEnvelope.class)))
                 .thenReturn(failedFuture);
 
-        assertThrows(java.util.concurrent.CompletionException.class, () -> relay.relay());
+        relay.relay();
 
-        verify(outboxService, never()).markPublished(any(), any());
+        verify(outboxService, never()).markPublished(any(), any(), any());
     }
 
     @Test
@@ -115,7 +117,7 @@ class OutboxRelayTest {
                 CREATED_AT
         );
         ArgumentCaptor<MessageEnvelope> envelopeCaptor = ArgumentCaptor.forClass(MessageEnvelope.class);
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(topicResolver.resolve(OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT))
                 .thenReturn("stock.events");
         when(messagePublisher.publish(eq("stock.events"), eq(ORDER_ID), envelopeCaptor.capture()))
@@ -127,6 +129,12 @@ class OutboxRelayTest {
         assertEquals(message.getId(), envelope.messageId());
         assertEquals(OutboxMessageType.STOCK_RESERVATION_CONFIRMED_EVENT.name(), envelope.messageType());
         assertSame(payload, envelope.payload());
-        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(UUID.class), any(Instant.class));
     }
+    private static List<ClaimedOutboxMessage> claimed(OutboxMessage... messages) {
+        return java.util.Arrays.stream(messages)
+                .map(message -> new ClaimedOutboxMessage(message, UUID.randomUUID()))
+                .toList();
+    }
+
 }

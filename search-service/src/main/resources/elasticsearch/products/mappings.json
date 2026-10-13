@@ -19,6 +19,12 @@
     },
     "updatedAt": {
       "type": "date"
+    },
+    "version": {
+      "type": "long"
+    },
+    "deleted": {
+      "type": "boolean"
     }
   }
 }

@@ -54,6 +54,9 @@ public class ProductSearchService {
         boolQuery.filter(query -> query.term(term -> term
                 .field("status")
                 .value(FieldValue.of(ProductStatus.ACTIVE.name()))));
+        boolQuery.mustNot(query -> query.term(term -> term
+                .field("deleted")
+                .value(FieldValue.of(true))));
 
         if (minPrice != null || maxPrice != null) {
             boolQuery.filter(query -> query.range(range -> range.untyped(untyped -> {

@@ -18,6 +18,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
 @Service
@@ -83,21 +85,31 @@ public class OutboxService {
         outboxRepository.save(message);
     }
 
-    @Transactional(readOnly = true)
-    public List<OutboxMessage> findPendingMessages() {
-        return outboxRepository.findTop100ByStatusOrderByCreatedAtAsc(
-                OutboxStatus.PENDING
-        );
+    @Transactional
+    public List<ClaimedOutboxMessage> claimMessages(int batchSize, long leaseSeconds) {
+        List<Object[]> claims = outboxRepository.claimEligibleMessages(batchSize, leaseSeconds);
+        if (claims.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, UUID> tokenById = new HashMap<>();
+        for (Object[] claim : claims) {
+            tokenById.put((UUID) claim[0], (UUID) claim[1]);
+        }
+        return outboxRepository.findAllById(tokenById.keySet()).stream()
+                .map(message -> new ClaimedOutboxMessage(message, tokenById.get(message.getId())))
+                .sorted(java.util.Comparator.comparing((ClaimedOutboxMessage claim) -> claim.message().getCreatedAt())
+                        .thenComparing(claim -> claim.message().getId()))
+                .toList();
     }
 
     @Transactional
-    public void markPublished(UUID messageId, Instant publishedAt) {
-        OutboxMessage message = outboxRepository.findById(messageId)
-                .orElseThrow(() ->
-                        new IllegalStateException("Outbox message not found: " + messageId)
-                );
+    public boolean markPublished(UUID messageId, UUID claimToken, Instant publishedAt) {
+        return outboxRepository.markClaimedMessagePublished(messageId, claimToken, publishedAt) == 1;
+    }
 
-        message.markPublished(publishedAt);
+    @Transactional
+    public boolean reschedule(UUID messageId, UUID claimToken, Instant retryAt) {
+        return outboxRepository.rescheduleClaimedMessage(messageId, claimToken, retryAt) == 1;
     }
 
     public JsonNode serialize(Object event) {

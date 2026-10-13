@@ -45,7 +45,7 @@ public class ProductService {
     public ProductResponse createProduct(ProductCreateRequest req) {
         Instant now = Instant.now();
         Product product = Product.create(req.name(), req.price(), now);
-        Product savedProduct = productRepository.save(product);
+        Product savedProduct = productRepository.saveAndFlush(product);
 
         ProductCreatedEvent event = new ProductCreatedEvent(
                 savedProduct.getId(),
@@ -53,7 +53,8 @@ public class ProductService {
                 savedProduct.getPrice(),
                 savedProduct.getStatus(),
                 savedProduct.getCreatedAt(),
-                savedProduct.getUpdatedAt()
+                savedProduct.getUpdatedAt(),
+                savedProduct.getVersion()
         );
         outboxService.createProductCreatedEvent(event, now);
         return ProductMapper.toResponse(savedProduct);
@@ -102,6 +103,7 @@ public class ProductService {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Product product = findProductWithId(productId);
         product.deactivateProduct(now);
+        productRepository.saveAndFlush(product);
 
         ProductDeactivatedEvent event = new ProductDeactivatedEvent(
                 product.getId(),
@@ -109,7 +111,8 @@ public class ProductService {
                 product.getPrice(),
                 product.getStatus(),
                 product.getCreatedAt(),
-                product.getUpdatedAt()
+                product.getUpdatedAt(),
+                product.getVersion()
         );
         outboxService.createProductDeactivatedEvent(event, now);
         return ProductMapper.toResponse(product);
@@ -119,7 +122,7 @@ public class ProductService {
     public void deleteProduct(UUID productId) {
         Product product = findProductWithId(productId);
         outboxService.createProductDeletedEvent(
-                new ProductDeletedEvent(product.getId()),
+                new ProductDeletedEvent(product.getId(), product.getVersion() + 1),
                 Instant.now()
         );
         productRepository.delete(product);
@@ -142,13 +145,16 @@ public class ProductService {
             product.changeProductPrice(req.price(), now);
         }
 
+        productRepository.saveAndFlush(product);
+
         ProductUpdatedEvent event = new ProductUpdatedEvent(
                 product.getId(),
                 product.getName(),
                 product.getPrice(),
                 product.getStatus(),
                 product.getCreatedAt(),
-                product.getUpdatedAt()
+                product.getUpdatedAt(),
+                product.getVersion()
         );
         outboxService.createProductUpdatedEvent(event, product.getUpdatedAt());
 

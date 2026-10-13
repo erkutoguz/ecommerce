@@ -22,6 +22,8 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doAnswer;
@@ -57,7 +59,7 @@ class OutboxRelayTest {
                 traceContext.traceparent(),
                 traceContext.tracestate()
         );
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(messagePublisher.publish(
                 eq("payment.events"),
                 eq(ORDER_ID),
@@ -88,7 +90,7 @@ class OutboxRelayTest {
         assertEquals("PAYMENT_COMPLETED_EVENT", envelope.messageType());
         assertEquals(CREATED_AT, envelope.occurredAt());
         assertEquals(message.getPayload(), envelope.payload());
-        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(UUID.class), any(Instant.class));
         verify(outboxTraceContext).runWithParent(eq(traceContext), any());
     }
 
@@ -103,7 +105,7 @@ class OutboxRelayTest {
                         .put("failureReason", "SESSION_EXPIRED"),
                 CREATED_AT
         );
-        when(outboxService.findPendingMessages()).thenReturn(List.of(message));
+        when(outboxService.claimMessages(anyInt(), anyLong())).thenReturn(claimed(message));
         when(messagePublisher.publish(
                 eq("payment.events"),
                 eq(ORDER_ID),
@@ -128,6 +130,12 @@ class OutboxRelayTest {
         relay.relay();
 
         verify(messagePublisher).publish(eq("payment.events"), eq(ORDER_ID), any(MessageEnvelope.class));
-        verify(outboxService).markPublished(eq(message.getId()), any(Instant.class));
+        verify(outboxService).markPublished(eq(message.getId()), any(UUID.class), any(Instant.class));
     }
+    private static List<ClaimedOutboxMessage> claimed(OutboxMessage... messages) {
+        return java.util.Arrays.stream(messages)
+                .map(message -> new ClaimedOutboxMessage(message, UUID.randomUUID()))
+                .toList();
+    }
+
 }
