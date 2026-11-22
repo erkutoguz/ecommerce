@@ -249,6 +249,8 @@ Search is available through the Gateway at `http://localhost:4002/search/product
 
 ### Observability
 
+> The observability layer (Actuator/Micrometer metrics, OpenTelemetry tracing, Prometheus, Tempo and Grafana setup) was implemented with AI assistance.
+
 Services wired into the observability stack use Spring Boot Actuator and Micrometer Tracing with the OpenTelemetry bridge and OTLP trace export to Tempo. Grafana provides trace search and dashboards; Prometheus scrapes `/actuator/prometheus` on their internal management ports. `spring.application.name` supplies each instrumented service's trace service name. HTTP tracing propagates W3C Trace Context through the Gateway and instrumented service clients; Kafka producer and listener observations continue context across event boundaries. Outbox records persist `traceparent` and `tracestate` so scheduled publishers preserve the originating context. Trace and span IDs are included in application log correlation fields. Search Service exposes its health and Prometheus endpoints on its internal management port and is included in Prometheus scraping and OTLP tracing.
 
 Outbox gauges use `outbox.pending.messages`, `outbox.in_progress.messages`, `outbox.expired.claims`, and `outbox.oldest.pending.age.seconds` in Auth, Product, Order, and Order Workflow. Stock and Payment use namespaced `stock.outbox.*` and `payment.outbox.*` gauges. These names reflect existing service-specific instrumentation; retain them when building dashboards.
